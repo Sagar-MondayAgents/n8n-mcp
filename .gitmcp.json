@@ -1,0 +1,11 @@
+{
+  "name": "n8n-mcp",
+  "command": "node",
+  "args": ["dist/mcp/index.js"],
+  "env": {
+    "MCP_MODE": "stdio",
+    "LOG_LEVEL": "error",
+    "DISABLE_CONSOLE_OUTPUT": "true"
+  },
+  "description": "N8N MCP Integration Server"
+}
