@@ -3,6 +3,11 @@
   "version": "2.7.10",
   "description": "Integration between n8n workflow automation and Model Context Protocol (MCP)",
   "main": "dist/index.js",
+  "mcp": {
+    "server": "dist/mcp/index.js",
+    "name": "n8n-mcp",
+    "description": "MCP server for n8n workflow automation"
+  },
   "bin": {
     "n8n-mcp": "./dist/mcp/index.js"
   },
@@ -47,7 +52,9 @@
     "db:init": "node -e \"new (require('./dist/services/sqlite-storage-service').SQLiteStorageService)(); console.log('Database initialized')\"",
     "docs:rebuild": "ts-node src/scripts/rebuild-database.ts",
     "sync:runtime-version": "node scripts/sync-runtime-version.js",
-    "prepare:publish": "./scripts/publish-npm.sh"
+    "prepare:publish": "./scripts/publish-npm.sh",
+    "mcp:start": "node dist/mcp/index.js"
+
   },
   "repository": {
     "type": "git",
