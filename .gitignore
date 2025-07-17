@@ -87,9 +87,6 @@ mcp-server-v20.sh
 rebuild-v20.sh
 !mcp-server-v20.example.sh
 
-# n8n-docs repo (cloned locally)
-../n8n-docs/
-n8n-docs/
 
 # npm publish temporary directory
 npm-publish-temp/

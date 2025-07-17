@@ -31,3 +31,8 @@ export interface PromptDefinition {
     required?: boolean;
   }>;
 }
+
+export interface N8NConfig {
+  apiUrl: string;
+  apiKey: string;
+}
