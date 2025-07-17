@@ -2,6 +2,8 @@
 
 Deploy n8n-MCP as a remote HTTP server to provide n8n knowledge to Claude from anywhere.
 
+📌 **Latest Version**: v2.7.6 (includes trust proxy support for correct IP logging behind reverse proxies)
+
 ## 🎯 Overview
 
 n8n-MCP HTTP mode enables:
@@ -10,6 +12,41 @@ n8n-MCP HTTP mode enables:
 - 🔒 Token-based authentication
 - ⚡ Production-ready performance (~12ms response time)
 - 🔧 Fixed implementation (v2.3.2) for stability
+- 🚀 Optional n8n management tools (16 additional tools when configured)
+
+## 📐 Deployment Scenarios
+
+### 1. Local Development (Simplest)
+Use **stdio mode** - Claude Desktop connects directly to the Node.js process:
+```
+Claude Desktop → n8n-mcp (stdio mode)
+```
+- ✅ No HTTP server needed
+- ✅ No authentication required
+- ✅ Fastest performance
+- ❌ Only works locally
+
+### 2. Local HTTP Server
+Run HTTP server locally for testing remote features:
+```
+Claude Desktop → http-bridge.js → localhost:3000
+```
+- ✅ Test HTTP features locally
+- ✅ Multiple Claude instances can connect
+- ✅ Good for development
+- ❌ Still only local access
+
+### 3. Remote Server
+Deploy to cloud for access from anywhere:
+```
+Claude Desktop → mcp-remote → https://your-server.com
+```
+- ✅ Access from anywhere
+- ✅ Team collaboration
+- ✅ Production-ready
+- ❌ Requires server setup
+
+⚠️ **Experimental Feature**: Remote server deployment has not been thoroughly tested. If you encounter any issues, please [open an issue](https://github.com/czlonkowski/n8n-mcp/issues) on GitHub.
 
 ## 📋 Prerequisites
 
@@ -26,7 +63,7 @@ n8n-MCP HTTP mode enables:
 
 ## 🚀 Quick Start
 
-### Option 1: Docker Deployment (Recommended)
+### Option 1: Docker Deployment (Recommended for Production)
 
 ```bash
 # 1. Create environment file
@@ -35,6 +72,9 @@ AUTH_TOKEN=$(openssl rand -base64 32)
 USE_FIXED_HTTP=true
 MCP_MODE=http
 PORT=3000
+# Optional: Enable n8n management tools
+# N8N_API_URL=https://your-n8n-instance.com
+# N8N_API_KEY=your-api-key-here
 EOF
 
 # 2. Deploy with Docker
@@ -49,7 +89,7 @@ docker run -d \
 curl http://localhost:3000/health
 ```
 
-### Option 2: Manual Installation
+### Option 2: Local Development (Without Docker)
 
 ```bash
 # 1. Clone and setup
@@ -67,6 +107,27 @@ export PORT=3000
 
 # 3. Start server
 npm run start:http
+```
+
+### Option 3: Direct stdio Mode (Simplest for Local)
+
+Skip HTTP entirely and use stdio mode directly:
+
+```json
+{
+  "mcpServers": {
+    "n8n-local": {
+      "command": "node",
+      "args": [
+        "/path/to/n8n-mcp/dist/mcp/index.js"
+      ],
+      "env": {
+        "N8N_API_URL": "https://your-n8n-instance.com",
+        "N8N_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
 ```
 
 💡 **Save your AUTH_TOKEN** - clients will need it to connect!
@@ -89,6 +150,82 @@ npm run start:http
 | `HOST` | Bind address | `0.0.0.0` |
 | `LOG_LEVEL` | Log verbosity | `info` |
 | `NODE_ENV` | Environment | `production` |
+| `TRUST_PROXY` | Trust proxy headers for correct IP logging | `0` |
+
+### n8n Management Tools (Optional)
+
+Enable 16 additional tools for managing n8n workflows by configuring API access:
+
+⚠️ **Requires v2.7.1+** - Earlier versions had an issue with tool registration in Docker environments.
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `N8N_API_URL` | Your n8n instance URL | `https://your-n8n.com` |
+| `N8N_API_KEY` | n8n API key (from Settings > API) | `n8n_api_key_xxx` |
+| `N8N_API_TIMEOUT` | Request timeout (ms) | `30000` |
+| `N8N_API_MAX_RETRIES` | Max retry attempts | `3` |
+
+#### What This Enables
+
+When configured, you get **16 additional tools** (total: 38 tools):
+
+**Workflow Management (11 tools):**
+- `n8n_create_workflow` - Create new workflows
+- `n8n_get_workflow` - Get workflow by ID
+- `n8n_update_full_workflow` - Update entire workflow
+- `n8n_update_partial_workflow` - Update using diff operations (v2.7.0+)
+- `n8n_delete_workflow` - Delete workflows
+- `n8n_list_workflows` - List all workflows
+- And more workflow detail/structure tools
+
+**Execution Management (4 tools):**
+- `n8n_trigger_webhook_workflow` - Execute via webhooks
+- `n8n_get_execution` - Get execution details
+- `n8n_list_executions` - List workflow runs
+- `n8n_delete_execution` - Delete execution records
+
+**System Tools:**
+- `n8n_health_check` - Check n8n connectivity
+- `n8n_diagnostic` - System diagnostics
+- `n8n_validate_workflow` - Validate from n8n instance
+
+#### Getting Your n8n API Key
+
+1. Log into your n8n instance
+2. Go to **Settings** > **API**
+3. Click **Create API Key**
+4. Copy the generated key
+
+⚠️ **Security Note**: Store API keys securely and never commit them to version control.
+
+## 🌐 Reverse Proxy Configuration
+
+### Trust Proxy for Correct IP Logging
+
+When running n8n-MCP behind a reverse proxy (Nginx, Traefik, etc.), enable trust proxy to log real client IPs instead of proxy IPs:
+
+```bash
+# Enable trust proxy in your environment
+TRUST_PROXY=1  # Trust 1 proxy hop (standard setup)
+# or
+TRUST_PROXY=2  # Trust 2 proxy hops (CDN → Load Balancer → n8n-mcp)
+```
+
+**Without TRUST_PROXY:**
+```
+[INFO] GET /health { ip: '172.19.0.2' }  # Docker internal IP
+```
+
+**With TRUST_PROXY=1:**
+```
+[INFO] GET /health { ip: '203.0.113.1' }  # Real client IP
+```
+
+This is especially important when:
+- Running in Docker/Kubernetes
+- Using load balancers
+- Debugging client issues
+- Implementing rate limiting
 
 ## 🔐 Security Setup
 
@@ -118,6 +255,10 @@ server {
     location /mcp {
         proxy_pass http://localhost:3000;
         proxy_set_header Authorization $http_authorization;
+        # Important: Forward client IP headers
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
@@ -131,7 +272,19 @@ your-domain.com {
 
 ## 💻 Client Configuration
 
-### For All Claude Desktop Users
+### Understanding the Architecture
+
+Claude Desktop only supports stdio (standard input/output) communication, but our HTTP server requires HTTP requests. We bridge this gap using one of two methods:
+
+```
+Method 1: Using mcp-remote (npm package)
+Claude Desktop (stdio) → mcp-remote → HTTP Server
+
+Method 2: Using custom bridge script
+Claude Desktop (stdio) → http-bridge.js → HTTP Server
+```
+
+### Method 1: Using mcp-remote (Recommended)
 
 **Requirements**: Node.js 18+ installed locally
 
@@ -149,6 +302,48 @@ your-domain.com {
       ],
       "env": {
         "AUTH_TOKEN": "your-auth-token-here"
+      }
+    }
+  }
+}
+```
+
+### Method 2: Using Custom Bridge Script
+
+For local testing or when mcp-remote isn't available:
+
+```json
+{
+  "mcpServers": {
+    "n8n-local-http": {
+      "command": "node",
+      "args": [
+        "/path/to/n8n-mcp/scripts/http-bridge.js"
+      ],
+      "env": {
+        "MCP_URL": "http://localhost:3000/mcp",
+        "AUTH_TOKEN": "your-auth-token-here"
+      }
+    }
+  }
+}
+```
+
+### Local Development with Docker
+
+When testing locally with Docker:
+
+```json
+{
+  "mcpServers": {
+    "n8n-docker-http": {
+      "command": "node",
+      "args": [
+        "/path/to/n8n-mcp/scripts/http-bridge.js"
+      ],
+      "env": {
+        "MCP_URL": "http://localhost:3001/mcp",
+        "AUTH_TOKEN": "docker-test-token"
       }
     }
   }
@@ -182,6 +377,10 @@ services:
       AUTH_TOKEN: ${AUTH_TOKEN:?AUTH_TOKEN required}
       NODE_ENV: production
       LOG_LEVEL: info
+      TRUST_PROXY: 1  # Enable if behind reverse proxy
+      # Optional: Enable n8n management tools
+      # N8N_API_URL: ${N8N_API_URL}
+      # N8N_API_KEY: ${N8N_API_KEY}
     ports:
       - "127.0.0.1:3000:3000"  # Bind to localhost only
     volumes:
@@ -336,6 +535,19 @@ docker scan ghcr.io/czlonkowski/n8n-mcp:latest
 - 🔄 Update Node.js to v18+ on client machine
 - Or use Docker stdio mode instead
 
+**"Why is command 'node' instead of 'docker'?"**
+- Claude Desktop only supports stdio communication
+- The bridge script (http-bridge.js or mcp-remote) translates between stdio and HTTP
+- Docker containers running HTTP servers need this bridge
+
+**Bridge script not working:**
+```bash
+# Test the bridge manually
+export MCP_URL=http://localhost:3000/mcp
+export AUTH_TOKEN=your-token
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node /path/to/http-bridge.js
+```
+
 **Connection refused:**
 ```bash
 # Check server is running
@@ -408,6 +620,41 @@ While n8n-MCP is designed for single-user deployments, you can build a multi-use
 4. **Implement rate limiting** per user
 
 See [Architecture Guide](./ARCHITECTURE.md) for building multi-user services.
+
+## 🔧 Using n8n Management Tools
+
+When n8n API is configured, Claude can manage workflows directly:
+
+### Example: Create a Workflow via Claude
+
+```bash
+# Test n8n connectivity first
+curl -X POST https://your-server.com/mcp \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "n8n_health_check",
+    "params": {},
+    "id": 1
+  }'
+```
+
+### Common Use Cases
+
+1. **Workflow Automation**: Claude can create, update, and manage workflows
+2. **CI/CD Integration**: Deploy workflows from version control
+3. **Workflow Templates**: Claude can apply templates to new workflows
+4. **Monitoring**: Track execution status and debug failures
+5. **Incremental Updates**: Use diff-based updates for efficient changes
+
+### Security Best Practices for n8n API
+
+- 🔐 Use separate API keys for different environments
+- 🔄 Rotate API keys regularly
+- 📝 Audit workflow changes via n8n's audit log
+- 🚫 Never expose n8n API directly to the internet
+- ✅ Use MCP server as a security layer
 
 ## 📦 Updates & Maintenance
 

@@ -1,5 +1,5 @@
 import { N8nApiClient } from '../services/n8n-api-client';
-import { n8nApiConfig } from '../config/n8n-api';
+import { getN8nApiConfig } from '../config/n8n-api';
 import { 
   Workflow, 
   WorkflowNode, 
@@ -26,15 +26,26 @@ import { NodeRepository } from '../database/node-repository';
 
 // Singleton n8n API client instance
 let apiClient: N8nApiClient | null = null;
+let lastConfigUrl: string | null = null;
 
-// Get or create API client
+// Get or create API client (with lazy config loading)
 export function getN8nApiClient(): N8nApiClient | null {
-  if (!n8nApiConfig) {
+  const config = getN8nApiConfig();
+  
+  if (!config) {
+    if (apiClient) {
+      logger.info('n8n API configuration removed, clearing client');
+      apiClient = null;
+      lastConfigUrl = null;
+    }
     return null;
   }
   
-  if (!apiClient) {
-    apiClient = new N8nApiClient(n8nApiConfig);
+  // Check if config has changed
+  if (!apiClient || lastConfigUrl !== config.baseUrl) {
+    logger.info('n8n API client initialized', { url: config.baseUrl });
+    apiClient = new N8nApiClient(config);
+    lastConfigUrl = config.baseUrl;
   }
   
   return apiClient;
@@ -754,7 +765,7 @@ export async function handleHealthCheck(): Promise<McpToolResponse> {
         instanceId: health.instanceId,
         n8nVersion: health.n8nVersion,
         features: health.features,
-        apiUrl: n8nApiConfig?.baseUrl
+        apiUrl: getN8nApiConfig()?.baseUrl
       }
     };
   } catch (error) {
@@ -764,7 +775,7 @@ export async function handleHealthCheck(): Promise<McpToolResponse> {
         error: getUserFriendlyErrorMessage(error),
         code: error.code,
         details: {
-          apiUrl: n8nApiConfig?.baseUrl,
+          apiUrl: getN8nApiConfig()?.baseUrl,
           hint: 'Check if n8n is running and API is enabled'
         }
       };
@@ -811,17 +822,18 @@ export async function handleListAvailableTools(): Promise<McpToolResponse> {
     }
   ];
   
-  const apiConfigured = n8nApiConfig !== null;
+  const config = getN8nApiConfig();
+  const apiConfigured = config !== null;
   
   return {
     success: true,
     data: {
       tools,
       apiConfigured,
-      configuration: apiConfigured ? {
-        apiUrl: n8nApiConfig!.baseUrl,
-        timeout: n8nApiConfig!.timeout,
-        maxRetries: n8nApiConfig!.maxRetries
+      configuration: config ? {
+        apiUrl: config.baseUrl,
+        timeout: config.timeout,
+        maxRetries: config.maxRetries
       } : null,
       limitations: [
         'Cannot activate/deactivate workflows via API',
@@ -830,5 +842,110 @@ export async function handleListAvailableTools(): Promise<McpToolResponse> {
         'Tags and credentials have limited API support'
       ]
     }
+  };
+}
+
+// Handler: n8n_diagnostic
+export async function handleDiagnostic(request: any): Promise<McpToolResponse> {
+  const verbose = request.params?.arguments?.verbose || false;
+  
+  // Check environment variables
+  const envVars = {
+    N8N_API_URL: process.env.N8N_API_URL || null,
+    N8N_API_KEY: process.env.N8N_API_KEY ? '***configured***' : null,
+    NODE_ENV: process.env.NODE_ENV || 'production',
+    MCP_MODE: process.env.MCP_MODE || 'stdio'
+  };
+  
+  // Check API configuration
+  const apiConfig = getN8nApiConfig();
+  const apiConfigured = apiConfig !== null;
+  const apiClient = getN8nApiClient();
+  
+  // Test API connectivity if configured
+  let apiStatus = {
+    configured: apiConfigured,
+    connected: false,
+    error: null as string | null,
+    version: null as string | null
+  };
+  
+  if (apiClient) {
+    try {
+      const health = await apiClient.healthCheck();
+      apiStatus.connected = true;
+      apiStatus.version = health.n8nVersion || 'unknown';
+    } catch (error) {
+      apiStatus.error = error instanceof Error ? error.message : 'Unknown error';
+    }
+  }
+  
+  // Check which tools are available
+  const documentationTools = 22; // Base documentation tools
+  const managementTools = apiConfigured ? 16 : 0;
+  const totalTools = documentationTools + managementTools;
+  
+  // Build diagnostic report
+  const diagnostic: any = {
+    timestamp: new Date().toISOString(),
+    environment: envVars,
+    apiConfiguration: {
+      configured: apiConfigured,
+      status: apiStatus,
+      config: apiConfig ? {
+        baseUrl: apiConfig.baseUrl,
+        timeout: apiConfig.timeout,
+        maxRetries: apiConfig.maxRetries
+      } : null
+    },
+    toolsAvailability: {
+      documentationTools: {
+        count: documentationTools,
+        enabled: true,
+        description: 'Always available - node info, search, validation, etc.'
+      },
+      managementTools: {
+        count: managementTools,
+        enabled: apiConfigured,
+        description: apiConfigured ? 
+          'Management tools are ENABLED - create, update, execute workflows' : 
+          'Management tools are DISABLED - configure N8N_API_URL and N8N_API_KEY to enable'
+      },
+      totalAvailable: totalTools
+    },
+    troubleshooting: {
+      steps: apiConfigured ? [
+        'API is configured and should work',
+        'If tools are not showing in Claude Desktop:',
+        '1. Restart Claude Desktop completely',
+        '2. Check if using latest Docker image',
+        '3. Verify environment variables are passed correctly',
+        '4. Try running n8n_health_check to test connectivity'
+      ] : [
+        'To enable management tools:',
+        '1. Set N8N_API_URL environment variable (e.g., https://your-n8n-instance.com)',
+        '2. Set N8N_API_KEY environment variable (get from n8n API settings)',
+        '3. Restart the MCP server',
+        '4. Management tools will automatically appear'
+      ],
+      documentation: 'For detailed setup instructions, see: https://github.com/czlonkowski/n8n-mcp#n8n-management-tools-new-v260---requires-api-configuration'
+    }
+  };
+  
+  // Add verbose debug info if requested
+  if (verbose) {
+    diagnostic['debug'] = {
+      processEnv: Object.keys(process.env).filter(key => 
+        key.startsWith('N8N_') || key.startsWith('MCP_')
+      ),
+      nodeVersion: process.version,
+      platform: process.platform,
+      workingDirectory: process.cwd()
+    };
+  }
+  
+  return {
+    success: true,
+    data: diagnostic
   };
 }

@@ -2,7 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/czlonkowski/n8n-mcp?style=social)](https://github.com/czlonkowski/n8n-mcp)
-[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](https://github.com/czlonkowski/n8n-mcp)
+[![Version](https://img.shields.io/badge/version-2.7.8-blue.svg)](https://github.com/czlonkowski/n8n-mcp)
+[![npm version](https://img.shields.io/npm/v/n8n-mcp.svg)](https://www.npmjs.com/package/n8n-mcp)
+[![n8n version](https://img.shields.io/badge/n8n-v1.100.1-orange.svg)](https://github.com/n8n-io/n8n)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fczlonkowski%2Fn8n--mcp-green.svg)](https://github.com/czlonkowski/n8n-mcp/pkgs/container/n8n-mcp)
 
 A Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to n8n node documentation, properties, and operations. Deploy in minutes to give Claude and other AI assistants deep knowledge about n8n's 525+ workflow automation nodes.
@@ -18,11 +20,79 @@ n8n-MCP serves as a bridge between n8n's workflow automation platform and AI mod
 - 🤖 **AI tools** - 263 AI-capable nodes detected with full documentation
 
 
+## ⚠️ Important Safety Warning
+
+**NEVER edit your production workflows directly with AI!** Always:
+- 🔄 **Make a copy** of your workflow before using AI tools
+- 🧪 **Test in development** environment first
+- 💾 **Export backups** of important workflows
+- ⚡ **Validate changes** before deploying to production
+
+AI results can be unpredictable. Protect your work!
+
 ## 🚀 Quick Start
 
 Get n8n-MCP running in 5 minutes:
 
-### Option 1: Docker (Easiest) 🚀
+[![n8n-mcp Video Quickstart Guide](./thumbnail.png)](https://youtu.be/5CccjiLLyaY?si=Z62SBGlw9G34IQnQ&t=343)
+
+### Option 1: npx (Fastest - No Installation!) 🚀
+
+**Prerequisites:** [Node.js](https://nodejs.org/) installed on your system
+
+```bash
+# Run directly with npx (no installation needed!)
+npx n8n-mcp
+```
+
+Add to Claude Desktop config:
+
+**Basic configuration (documentation tools only):**
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": ["n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true"
+      }
+    }
+  }
+}
+```
+
+**Full configuration (with n8n management tools):**
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": ["n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "https://your-n8n-instance.com",
+        "N8N_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+> **Note**: npx will download and run the latest version automatically. The package includes a pre-built database with all n8n node information.
+
+**Configuration file locations:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+**Restart Claude Desktop after updating configuration** - That's it! 🎉
+
+### Option 2: Docker (Easy & Isolated) 🐳
 
 **Prerequisites:** Docker installed on your system
 
@@ -122,6 +192,8 @@ Add to Claude Desktop config:
 }
 ```
 
+>💡 Tip: If you’re running n8n locally on the same machine (e.g., via Docker), use http://host.docker.internal:5678 as the N8N_API_URL.
+
 > **Note**: The n8n API credentials are optional. Without them, you'll have access to all documentation and validation tools. With them, you'll additionally get workflow management capabilities (create, update, execute workflows).
 
 **Important:** The `-i` flag is required for MCP stdio communication.
@@ -133,7 +205,7 @@ Add to Claude Desktop config:
 
 **Restart Claude Desktop after updating configuration** - That's it! 🎉
 
-### Option 2: Local Installation
+### Option 3: Local Installation (For Development)
 
 **Prerequisites:** [Node.js](https://nodejs.org/) installed on your system
 
@@ -189,6 +261,8 @@ Add to Claude Desktop config:
 
 > **Note**: The n8n API credentials can be configured either in a `.env` file (create from `.env.example`) or directly in the Claude config as shown above.
 
+> 💡 Tip: If you’re running n8n locally on the same machine (e.g., via Docker), use http://host.docker.internal:5678 as the N8N_API_URL.
+
 ## 🤖 Claude Project Setup
 
 For the best results when using n8n-MCP with Claude Projects, use these enhanced system instructions:
@@ -198,7 +272,7 @@ You are an expert in n8n automation software using n8n-MCP tools. Your role is t
 
 ## Core Workflow Process
 
-1. **ALWAYS start with**: `start_here_workflow_guide()` to understand best practices and available tools.
+1. **ALWAYS start with**: `tools_documentation()` to understand best practices and available tools.
 
 2. **Discovery Phase** - Find the right nodes:
    - `search_nodes({query: 'keyword'})` - Search by functionality
@@ -221,6 +295,7 @@ You are an expert in n8n automation software using n8n-MCP tools. Your role is t
    - Connect nodes with proper structure
    - Add error handling where appropriate
    - Use expressions like $json, $node["NodeName"].json
+   - Build the workflow in an artifact (unless the user asked to create in n8n instance)
 
 6. **Workflow Validation Phase** - Validate complete workflow:
    - `validate_workflow(workflow)` - Complete validation including connections
@@ -343,7 +418,7 @@ When Claude, Anthropic's AI assistant, tested n8n-MCP, the results were transfor
 Once connected, Claude can use these powerful tools:
 
 ### Core Tools
-- **`start_here_workflow_guide`** - Essential guide and best practices (START HERE!)
+- **`tools_documentation`** - Get documentation for any MCP tool (START HERE!)
 - **`list_nodes`** - List all n8n nodes with filtering options
 - **`get_node_info`** - Get comprehensive information about a specific node
 - **`get_node_essentials`** - Get only essential properties with examples (10-20 properties instead of 200+)
@@ -387,6 +462,7 @@ These powerful tools allow you to manage n8n workflows directly from Claude. The
 
 #### System Tools
 - **`n8n_health_check`** - Check n8n API connectivity and features
+- **`n8n_diagnostic`** - Troubleshoot management tools visibility and configuration issues
 - **`n8n_list_available_tools`** - List all available management tools
 
 ### Example Usage
@@ -469,24 +545,27 @@ npm run dev:http       # HTTP dev mode
 - [Installation Guide](./docs/INSTALLATION.md) - Comprehensive installation instructions
 - [Claude Desktop Setup](./docs/README_CLAUDE_SETUP.md) - Detailed Claude configuration
 - [Docker Guide](./docs/DOCKER_README.md) - Advanced Docker deployment options
+- [MCP Quick Start](./docs/MCP_QUICK_START_GUIDE.md) - Get started quickly with n8n-MCP
 
-### Usage & Best Practices
+### Feature Documentation
+- [Workflow Diff Operations](./docs/workflow-diff-examples.md) - Token-efficient workflow updates (NEW!)
+- [Transactional Updates](./docs/transactional-updates-example.md) - Two-pass workflow editing
+- [MCP Essentials](./docs/MCP_ESSENTIALS_README.md) - AI-optimized tools guide
+- [Validation System](./docs/validation-improvements-v2.4.2.md) - Smart validation profiles
+
+### Development & Deployment
+- [HTTP Deployment](./docs/HTTP_DEPLOYMENT.md) - Remote server setup guide
+- [Dependency Management](./docs/DEPENDENCY_UPDATES.md) - Keeping n8n packages in sync
 - [Claude's Interview](./docs/CLAUDE_INTERVIEW.md) - Real-world impact of n8n-MCP
-- [Claude Project Instructions](#claude-project-setup) - Optimal system instructions for n8n workflows
-- [MCP Tools List](#-available-mcp-tools) - Complete list of available tools
 
-### Technical Documentation
-- [HTTP Deployment (Beta)](./docs/HTTP_DEPLOYMENT.md) - Remote server setup
-- [Dependency Updates](./docs/DEPENDENCY_UPDATES.md) - Managing n8n dependencies
-- [Validation Improvements](./docs/validation-improvements-v2.4.2.md) - Validation system details
-
-### Troubleshooting
-- [Change Log](./docs/CHANGELOG.md) - Version history and updates
-- [Docker Fixes](./docs/DOCKER_FIX_IMPLEMENTATION.md) - Docker-specific troubleshooting
+### Project Information
+- [Change Log](./CHANGELOG.md) - Complete version history
+- [Claude Instructions](./CLAUDE.md) - AI guidance for this codebase
+- [MCP Tools Reference](#-available-mcp-tools) - Complete list of available tools
 
 ## 📊 Metrics & Coverage
 
-Current database coverage (n8n v1.99.1):
+Current database coverage (n8n v1.100.1):
 
 - ✅ **525/525** nodes loaded (100%)
 - ✅ **520** nodes with properties (99%)
@@ -498,6 +577,36 @@ Current database coverage (n8n v1.99.1):
 
 ## 🔄 Recent Updates
 
+### v2.7.10 - Enhanced Authentication Logging
+- ✅ **ENHANCED**: Authentication logging for better debugging of client authentication issues
+- ✅ **ADDED**: Specific error reasons: `no_auth_header`, `invalid_auth_format`, `invalid_token`
+- ✅ **FIXED**: Issue #22 - Improved authentication failure diagnostics
+- ✅ **FIXED**: Issue #16 - AUTH_TOKEN_FILE validation for Docker production stacks
+- ✅ **SECURITY**: Removed token length from logs, trimmed tokens for whitespace edge cases
+
+### v2.7.8 - npx Support & npm Publishing
+- ✅ **NEW**: npx support - Run `npx n8n-mcp` without installation!
+- ✅ **OPTIMIZED**: npm package with runtime-only dependencies (8 deps vs 50+ dev deps)
+- ✅ **REDUCED**: Package size from 1GB+ to ~50MB by excluding dev dependencies
+- ✅ **FIXED**: Issue #15 - Added npx execution support as requested
+- ✅ **ENHANCED**: Database path resolution for npx, global, and local installations
+
+### v2.7.5 - AUTH_TOKEN_FILE Support
+- ✅ **NEW**: AUTH_TOKEN_FILE support for Docker secrets compatibility
+- ✅ **ADDED**: Known Issues section documenting Claude Desktop container duplication
+- ✅ **ENHANCED**: Authentication flexibility with both AUTH_TOKEN and AUTH_TOKEN_FILE
+- ✅ **FIXED**: Issue #16 - AUTH_TOKEN_FILE now properly implemented as documented
+- ✅ **BACKWARD COMPATIBLE**: AUTH_TOKEN continues to work as before
+
+### v2.7.4 - Self-Documenting MCP Tools
+- ✅ **RENAMED**: `start_here_workflow_guide` → `tools_documentation` for clarity
+- ✅ **NEW**: Depth parameter - Control documentation detail with "essentials" or "full"
+- ✅ **NEW**: Per-tool documentation - Get help for any specific MCP tool by name
+- ✅ **CONCISE**: Essential info by default, comprehensive docs on demand
+- ✅ **LLM-FRIENDLY**: Plain text format instead of JSON for better readability
+- ✅ **QUICK HELP**: Call without parameters for immediate quick reference
+- ✅ **8 TOOLS DOCUMENTED**: Complete documentation for most commonly used tools
+
 ### v2.7.0 - Diff-Based Workflow Editing with Transactional Updates
 - ✅ **NEW**: `n8n_update_partial_workflow` tool - Update workflows using diff operations
 - ✅ **RENAMED**: `n8n_update_workflow` → `n8n_update_full_workflow` for clarity
@@ -508,81 +617,44 @@ Current database coverage (n8n v1.99.1):
 - ✅ **VALIDATION MODE**: Test changes with `validateOnly: true` before applying
 - ✅ **IMPROVED DOCS**: Comprehensive parameter documentation and examples
 
-### v2.6.3 - n8n Instance Workflow Validation
-- ✅ **NEW**: `n8n_validate_workflow` tool - Validate workflows directly from n8n instance by ID
-- ✅ **FETCHES**: Retrieves workflow from n8n API and runs comprehensive validation
-- ✅ **CONSISTENT**: Uses same WorkflowValidator for reliability
-- ✅ **FLEXIBLE**: Supports all validation profiles and options
-- ✅ **INTEGRATED**: Part of complete workflow lifecycle management
-- ✅ **SIMPLE**: AI agents need only workflow ID, no JSON required
-
-### v2.6.2 - Enhanced Workflow Creation Validation
-- ✅ **NEW**: Node type validation - Verifies node types actually exist in n8n
-- ✅ **FIXED**: Critical issue with `nodes-base.webhook` validation - now caught before database lookup
-- ✅ **NEW**: Smart suggestions for common mistakes (e.g., `webhook` → `n8n-nodes-base.webhook`)
-- ✅ **NEW**: Minimum viable workflow validation - Prevents single-node workflows (except webhooks)
-- ✅ **NEW**: Empty connection detection - Catches multi-node workflows with no connections
-- ✅ **ENHANCED**: Error messages with clear guidance and examples
-- ✅ **PREVENTS**: Broken workflows that show as question marks in n8n UI
-
-### v2.6.1 - Enhanced typeVersion Validation
-- ✅ **NEW**: typeVersion validation for all versioned nodes
-- ✅ **CATCHES**: Missing typeVersion with correct version suggestions
-- ✅ **WARNS**: Outdated node versions in use
-- ✅ **PREVENTS**: Invalid versions that exceed maximum supported
-- ✅ **HELPS**: AI agents avoid common workflow creation mistakes
-
-### v2.6.0 - n8n Management Tools Integration
-- ✅ **NEW**: 14 n8n management tools for complete workflow lifecycle
-- ✅ **NEW**: Create, update, execute workflows via API
-- ✅ **NEW**: Webhook workflow triggering support
-- ✅ **NEW**: Execution monitoring and management
-- ✅ **INTEGRATED**: n8n-manager-for-ai-agents functionality
-- ✅ **OPTIONAL**: Only enabled when N8N_API_URL and N8N_API_KEY configured
-
-### v2.5.1 - AI Tool Support Enhancement
-- ✅ **NEW**: AI tool connection validation in workflows
-- ✅ **NEW**: `get_node_as_tool_info` - Guidance for using ANY node as AI tool
-- ✅ **ENHANCED**: `get_node_info` now includes aiToolCapabilities section
-- ✅ **IMPROVED**: Workflow validation understands ai_tool connections
-- ✅ **ADDED**: $fromAI() expression validation for dynamic AI parameters
-- ✅ **CLARIFIED**: ANY node can be used as an AI tool, not just usableAsTool nodes
-
-### v2.5.0 - Complete Workflow Validation
-- ✅ **NEW**: `validate_workflow` - Validate entire workflows before deployment
-- ✅ **NEW**: `validate_workflow_connections` - Check workflow structure
-- ✅ **NEW**: `validate_workflow_expressions` - Validate n8n expressions
-- ✅ **NEW**: Cycle detection for workflows
-- ✅ **NEW**: Expression syntax validation
-
-### v2.4.2 - Professional Validation System
-- ✅ **NEW**: `validate_node_operation` - Operation-aware validation with 80% fewer false positives
-- ✅ **NEW**: `validate_node_minimal` - Lightning-fast required field checking
-- ✅ **NEW**: Validation profiles - Choose between minimal, runtime, ai-friendly, or strict
-- ✅ **NEW**: Node validators for Webhook, Postgres, MySQL with SQL safety checks
-- ✅ **IMPROVED**: Deduplicates errors, filters internal properties
-- ✅ **ADDED**: Basic code syntax validation for JavaScript/Python
-- ✅ **ADDED**: SQL injection detection and unsafe query warnings
-- ✅ **FIXED**: Removed deprecated `validate_node_config` tool
-
-### v2.4.0 - AI-Optimized Tools & MIT License
-- ✅ **NEW**: `get_node_essentials` - 95% smaller responses
-- ✅ **NEW**: Task templates for common automations
-- ✅ **NEW**: Configuration validation
-- ✅ Fixed missing AI/LangChain documentation
-- ✅ Changed to MIT License for wider adoption
-
-### v2.3.3 - Automated Updates
-- ✅ Weekly automated n8n dependency updates
-- ✅ GitHub Actions workflow
-- ✅ AI-capable nodes: 35 → 263
-
-### v2.3.0 - Universal Compatibility
-- ✅ Works with ANY Node.js version
-- ✅ Automatic database adapter fallback
-- ✅ No manual configuration needed
 
 See [CHANGELOG.md](./docs/CHANGELOG.md) for full version history.
+
+## ⚠️ Known Issues
+
+### Claude Desktop Container Duplication
+When using n8n-MCP with Claude Desktop in Docker mode, Claude Desktop may start the container twice during initialization. This is a known Claude Desktop bug ([modelcontextprotocol/servers#812](https://github.com/modelcontextprotocol/servers/issues/812)).
+
+**Symptoms:**
+- Two identical containers running for the same MCP server
+- Container name conflicts if using `--name` parameter
+- Doubled resource usage
+
+**Workarounds:**
+1. **Avoid using --name parameter** - Let Docker assign random names:
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "ghcr.io/czlonkowski/n8n-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+2. **Use HTTP mode instead** - Deploy n8n-mcp as a standalone HTTP server:
+```bash
+docker compose up -d  # Start HTTP server
+```
+Then connect via mcp-remote (see [HTTP Deployment Guide](./docs/HTTP_DEPLOYMENT.md))
+
+3. **Use Docker MCP Toolkit** - Better container management through Docker Desktop
+
+This issue does not affect the functionality of n8n-MCP itself, only the container management in Claude Desktop.
 
 ## 📦 License
 
