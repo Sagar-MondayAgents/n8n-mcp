@@ -1,0 +1,14 @@
+{
+    "name": "n8n-mcp",
+    "description": "N8N MCP Integration",
+    "version": "2.7.10",
+    "main": "dist/mcp/index.js",
+    "type": "stdio",
+    "languages": ["typescript"],
+    "build": "npm run build && npm run rebuild",
+    "env": {
+      "MCP_MODE": "stdio",
+      "LOG_LEVEL": "error",
+      "DISABLE_CONSOLE_OUTPUT": "true"
+    }
+  }
