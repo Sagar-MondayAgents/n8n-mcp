@@ -15,7 +15,6 @@ lerna-debug.log*
 .env*.local
 
 # Build output
-dist/
 build/
 out/
 .next/

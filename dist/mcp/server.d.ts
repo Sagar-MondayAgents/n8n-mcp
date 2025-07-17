@@ -1,0 +1,42 @@
+export declare class N8NDocumentationMCPServer {
+    private server;
+    private db;
+    private repository;
+    private templateService;
+    private initialized;
+    private cache;
+    constructor();
+    private initializeDatabase;
+    private ensureInitialized;
+    private setupHandlers;
+    private listNodes;
+    private getNodeInfo;
+    private searchNodes;
+    private calculateRelevance;
+    private listAITools;
+    private getNodeDocumentation;
+    private getDatabaseStatistics;
+    private getNodeEssentials;
+    private searchNodeProperties;
+    private getNodeForTask;
+    private getPropertyValue;
+    private listTasks;
+    private validateNodeConfig;
+    private getPropertyDependencies;
+    private getNodeAsToolInfo;
+    private getCommonAIToolUseCases;
+    private getAIToolExamples;
+    private validateNodeMinimal;
+    private getToolsDocumentation;
+    connect(transport: any): Promise<void>;
+    private listNodeTemplates;
+    private getTemplate;
+    private searchTemplates;
+    private getTemplatesForTask;
+    private getTaskDescription;
+    private validateWorkflow;
+    private validateWorkflowConnections;
+    private validateWorkflowExpressions;
+    run(): Promise<void>;
+}
+//# sourceMappingURL=server.d.ts.map

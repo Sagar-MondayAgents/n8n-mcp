@@ -1,0 +1,1 @@
+{"version":3,"file":"http-server-fixed.d.ts","sourceRoot":"","sources":["../src/http-server-fixed.ts"],"names":[],"mappings":";AA2DA,wBAAsB,oBAAoB,kBA8SzC;AAGD,OAAO,QAAQ,qBAAqB,CAAC;IACnC,UAAU,yBAAyB;QACjC,WAAW,CAAC,IAAI,EAAE,MAAM,EAAE,IAAI,EAAE,GAAG,GAAG,OAAO,CAAC,GAAG,CAAC,CAAC;KACpD;CACF"}

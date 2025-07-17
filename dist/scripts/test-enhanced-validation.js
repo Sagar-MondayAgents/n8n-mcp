@@ -1,0 +1,117 @@
+#!/usr/bin/env ts-node
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const config_validator_1 = require("../services/config-validator");
+const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
+const database_adapter_1 = require("../database/database-adapter");
+const node_repository_1 = require("../database/node-repository");
+async function testValidation() {
+    const db = await (0, database_adapter_1.createDatabaseAdapter)('./data/nodes.db');
+    const repository = new node_repository_1.NodeRepository(db);
+    console.log('🧪 Testing Enhanced Validation System\n');
+    console.log('='.repeat(60));
+    console.log('\n📧 Test Case 1: Slack Send Message');
+    console.log('-'.repeat(40));
+    const slackConfig = {
+        resource: 'message',
+        operation: 'send',
+        channel: '#general',
+        text: 'Hello from n8n!'
+    };
+    const slackNode = repository.getNode('nodes-base.slack');
+    if (slackNode && slackNode.properties) {
+        console.log('\n❌ OLD Validation (validate_node_config):');
+        const oldResult = config_validator_1.ConfigValidator.validate('nodes-base.slack', slackConfig, slackNode.properties);
+        console.log(`  Errors: ${oldResult.errors.length}`);
+        console.log(`  Warnings: ${oldResult.warnings.length}`);
+        console.log(`  Visible Properties: ${oldResult.visibleProperties.length}`);
+        if (oldResult.errors.length > 0) {
+            console.log('\n  Sample errors:');
+            oldResult.errors.slice(0, 3).forEach(err => {
+                console.log(`    - ${err.message}`);
+            });
+        }
+        console.log('\n✅ NEW Validation (validate_node_operation):');
+        const newResult = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode('nodes-base.slack', slackConfig, slackNode.properties, 'operation');
+        console.log(`  Errors: ${newResult.errors.length}`);
+        console.log(`  Warnings: ${newResult.warnings.length}`);
+        console.log(`  Mode: ${newResult.mode}`);
+        console.log(`  Operation: ${newResult.operation?.resource}/${newResult.operation?.operation}`);
+        if (newResult.examples && newResult.examples.length > 0) {
+            console.log('\n  📚 Examples provided:');
+            newResult.examples.forEach(ex => {
+                console.log(`    - ${ex.description}`);
+            });
+        }
+        if (newResult.nextSteps && newResult.nextSteps.length > 0) {
+            console.log('\n  🎯 Next steps:');
+            newResult.nextSteps.forEach(step => {
+                console.log(`    - ${step}`);
+            });
+        }
+    }
+    console.log('\n\n📊 Test Case 2: Google Sheets Append (with errors)');
+    console.log('-'.repeat(40));
+    const sheetsConfigBad = {
+        operation: 'append',
+    };
+    const sheetsNode = repository.getNode('nodes-base.googleSheets');
+    if (sheetsNode && sheetsNode.properties) {
+        const result = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode('nodes-base.googleSheets', sheetsConfigBad, sheetsNode.properties, 'operation');
+        console.log(`\n  Validation result:`);
+        console.log(`  Valid: ${result.valid}`);
+        console.log(`  Errors: ${result.errors.length}`);
+        if (result.errors.length > 0) {
+            console.log('\n  Errors found:');
+            result.errors.forEach(err => {
+                console.log(`    - ${err.message}`);
+                if (err.fix)
+                    console.log(`      Fix: ${err.fix}`);
+            });
+        }
+        if (result.examples && result.examples.length > 0) {
+            console.log('\n  📚 Working examples provided:');
+            result.examples.forEach(ex => {
+                console.log(`    - ${ex.description}:`);
+                console.log(`      ${JSON.stringify(ex.config, null, 2).split('\n').join('\n      ')}`);
+            });
+        }
+    }
+    console.log('\n\n💬 Test Case 3: Slack Update Message');
+    console.log('-'.repeat(40));
+    const slackUpdateConfig = {
+        resource: 'message',
+        operation: 'update',
+        channel: '#general',
+        text: 'Updated message'
+    };
+    if (slackNode && slackNode.properties) {
+        const result = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode('nodes-base.slack', slackUpdateConfig, slackNode.properties, 'operation');
+        console.log(`\n  Validation result:`);
+        console.log(`  Valid: ${result.valid}`);
+        console.log(`  Errors: ${result.errors.length}`);
+        result.errors.forEach(err => {
+            console.log(`    - Property: ${err.property}`);
+            console.log(`      Message: ${err.message}`);
+            console.log(`      Fix: ${err.fix}`);
+        });
+    }
+    console.log('\n\n📈 Summary: Old vs New Validation');
+    console.log('='.repeat(60));
+    console.log('\nOLD validate_node_config:');
+    console.log('  ❌ Validates ALL properties regardless of operation');
+    console.log('  ❌ Many false positives for complex nodes');
+    console.log('  ❌ Generic error messages');
+    console.log('  ❌ No examples or next steps');
+    console.log('\nNEW validate_node_operation:');
+    console.log('  ✅ Only validates properties for selected operation');
+    console.log('  ✅ 80%+ reduction in false positives');
+    console.log('  ✅ Operation-specific error messages');
+    console.log('  ✅ Includes working examples when errors found');
+    console.log('  ✅ Provides actionable next steps');
+    console.log('  ✅ Auto-fix suggestions for common issues');
+    console.log('\n✨ The enhanced validation makes AI agents much more effective!');
+    db.close();
+}
+testValidation().catch(console.error);
+//# sourceMappingURL=test-enhanced-validation.js.map

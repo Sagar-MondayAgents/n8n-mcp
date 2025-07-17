@@ -1,0 +1,21 @@
+import { N8nApiClient } from '../services/n8n-api-client';
+import { McpToolResponse } from '../types/n8n-api';
+import { NodeRepository } from '../database/node-repository';
+export declare function getN8nApiClient(): N8nApiClient | null;
+export declare function handleCreateWorkflow(args: unknown): Promise<McpToolResponse>;
+export declare function handleGetWorkflow(args: unknown): Promise<McpToolResponse>;
+export declare function handleGetWorkflowDetails(args: unknown): Promise<McpToolResponse>;
+export declare function handleGetWorkflowStructure(args: unknown): Promise<McpToolResponse>;
+export declare function handleGetWorkflowMinimal(args: unknown): Promise<McpToolResponse>;
+export declare function handleUpdateWorkflow(args: unknown): Promise<McpToolResponse>;
+export declare function handleDeleteWorkflow(args: unknown): Promise<McpToolResponse>;
+export declare function handleListWorkflows(args: unknown): Promise<McpToolResponse>;
+export declare function handleValidateWorkflow(args: unknown, repository: NodeRepository): Promise<McpToolResponse>;
+export declare function handleTriggerWebhookWorkflow(args: unknown): Promise<McpToolResponse>;
+export declare function handleGetExecution(args: unknown): Promise<McpToolResponse>;
+export declare function handleListExecutions(args: unknown): Promise<McpToolResponse>;
+export declare function handleDeleteExecution(args: unknown): Promise<McpToolResponse>;
+export declare function handleHealthCheck(): Promise<McpToolResponse>;
+export declare function handleListAvailableTools(): Promise<McpToolResponse>;
+export declare function handleDiagnostic(request: any): Promise<McpToolResponse>;
+//# sourceMappingURL=handlers-n8n-manager.d.ts.map
