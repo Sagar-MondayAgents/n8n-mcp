@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Copyright (c) 2024 AiAdvisors Romuald Czlonkowski
+ * Licensed under the Sustainable Use License v1.0
+ */
 const database_adapter_1 = require("../database/database-adapter");
 const node_repository_1 = require("../database/node-repository");
 const TEST_CASES = [
@@ -42,6 +46,7 @@ async function runTests() {
             if (!node) {
                 throw new Error('Node not found');
             }
+            // Run checks
             for (const [check, expected] of Object.entries(testCase.checks)) {
                 switch (check) {
                     case 'hasProperties':

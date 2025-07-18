@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Run validation on templates and provide a clean summary
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -45,7 +48,7 @@ async function runValidationSummary() {
             try {
                 const workflow = JSON.parse(template.workflow_json);
                 const validationResult = await validator.validateWorkflow(workflow, {
-                    profile: 'minimal'
+                    profile: 'minimal' // Use minimal profile to focus on critical errors
                 });
                 if (validationResult.valid) {
                     results.valid++;
@@ -56,6 +59,7 @@ async function runValidationSummary() {
                 if (validationResult.errors.length === 0) {
                     results.noErrors++;
                 }
+                // Categorize errors
                 validationResult.errors.forEach((error) => {
                     const errorMsg = typeof error.message === 'string' ? error.message : JSON.stringify(error.message);
                     if (errorMsg.includes('Unknown node type')) {
@@ -90,6 +94,7 @@ async function runValidationSummary() {
                 results.invalid++;
             }
         }
+        // Print summary
         console.log('\n' + '='.repeat(80));
         console.log('WORKFLOW VALIDATION SUMMARY');
         console.log('='.repeat(80));
@@ -128,6 +133,7 @@ async function runValidationSummary() {
         db.close();
     }
 }
+// Run summary
 runValidationSummary().catch(error => {
     logger.error('Summary failed:', error);
     process.exit(1);

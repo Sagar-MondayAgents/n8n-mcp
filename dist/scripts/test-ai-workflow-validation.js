@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Test AI workflow validation enhancements
+ */
 const database_adapter_1 = require("../database/database-adapter");
 const node_repository_1 = require("../database/node-repository");
 const workflow_validator_1 = require("../services/workflow-validator");
 const logger_1 = require("../utils/logger");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
 const logger = new logger_1.Logger({ prefix: '[TestAIWorkflow]' });
+// Test workflow with AI Agent and tools
 const aiWorkflow = {
     name: 'AI Agent with Tools',
     nodes: [
@@ -78,6 +82,7 @@ const aiWorkflow = {
         }
     }
 };
+// Test workflow without tools (should trigger warning)
 const aiWorkflowNoTools = {
     name: 'AI Agent without Tools',
     nodes: [
@@ -104,6 +109,7 @@ const aiWorkflowNoTools = {
         }
     }
 };
+// Test workflow with googleSheetsTool (unknown node type)
 const unknownToolWorkflow = {
     name: 'Unknown Tool Test',
     nodes: [
@@ -180,8 +186,11 @@ async function testWorkflow(name, workflow) {
 }
 async function main() {
     console.log('🤖 Testing AI Workflow Validation Enhancements');
+    // Test 1: Complete AI workflow with tools
     await testWorkflow('AI Agent with Multiple Tools', aiWorkflow);
+    // Test 2: AI Agent without tools (should warn)
     await testWorkflow('AI Agent without Tools', aiWorkflowNoTools);
+    // Test 3: Unknown tool type (like googleSheetsTool)
     await testWorkflow('Unknown Tool Type', unknownToolWorkflow);
     console.log('\n✅ All tests completed!');
 }

@@ -1,10 +1,20 @@
 "use strict";
+/**
+ * Node-Specific Validators
+ *
+ * Provides detailed validation logic for commonly used n8n nodes.
+ * Each validator understands the specific requirements and patterns of its node.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeSpecificValidators = void 0;
 class NodeSpecificValidators {
+    /**
+     * Validate Slack node configuration with operation awareness
+     */
     static validateSlack(context) {
         const { config, errors, warnings, suggestions } = context;
         const { resource, operation } = config;
+        // Message operations
         if (resource === 'message') {
             switch (operation) {
                 case 'send':
@@ -18,6 +28,7 @@ class NodeSpecificValidators {
                     break;
             }
         }
+        // Channel operations
         else if (resource === 'channel') {
             switch (operation) {
                 case 'create':
@@ -25,9 +36,11 @@ class NodeSpecificValidators {
                     break;
                 case 'get':
                 case 'getAll':
+                    // These operations have minimal requirements
                     break;
             }
         }
+        // User operations
         else if (resource === 'user') {
             if (operation === 'get' && !config.user) {
                 errors.push({
@@ -41,6 +54,7 @@ class NodeSpecificValidators {
     }
     static validateSlackSendMessage(context) {
         const { config, errors, warnings, suggestions, autofix } = context;
+        // Channel is required for sending messages
         if (!config.channel && !config.channelId) {
             errors.push({
                 type: 'missing_required',
@@ -49,6 +63,7 @@ class NodeSpecificValidators {
                 fix: 'Set channel to a channel name (e.g., "#general") or ID (e.g., "C1234567890")'
             });
         }
+        // Message content validation
         if (!config.text && !config.blocks && !config.attachments) {
             errors.push({
                 type: 'missing_required',
@@ -57,6 +72,7 @@ class NodeSpecificValidators {
                 fix: 'Add text field with your message content'
             });
         }
+        // Common patterns and suggestions
         if (config.text && config.text.length > 40000) {
             warnings.push({
                 type: 'inefficient',
@@ -65,6 +81,7 @@ class NodeSpecificValidators {
                 suggestion: 'Split into multiple messages or use a file upload'
             });
         }
+        // Thread reply validation
         if (config.replyToThread && !config.threadTs) {
             warnings.push({
                 type: 'missing_common',
@@ -73,6 +90,7 @@ class NodeSpecificValidators {
                 suggestion: 'Set threadTs to the timestamp of the thread parent message'
             });
         }
+        // Mention handling
         if (config.text?.includes('@') && !config.linkNames) {
             suggestions.push('Set linkNames=true to convert @mentions to user links');
             autofix.linkNames = true;
@@ -132,6 +150,7 @@ class NodeSpecificValidators {
             });
         }
         else {
+            // Validate channel name format
             const name = config.name;
             if (name.includes(' ')) {
                 errors.push({
@@ -159,9 +178,13 @@ class NodeSpecificValidators {
             }
         }
     }
+    /**
+     * Validate Google Sheets node configuration
+     */
     static validateGoogleSheets(context) {
         const { config, errors, warnings, suggestions } = context;
         const { operation } = config;
+        // Common validations
         if (!config.sheetId && !config.documentId) {
             errors.push({
                 type: 'missing_required',
@@ -170,6 +193,7 @@ class NodeSpecificValidators {
                 fix: 'Provide the Google Sheets document ID from the URL'
             });
         }
+        // Operation-specific validations
         switch (operation) {
             case 'append':
                 this.validateGoogleSheetsAppend(context);
@@ -184,6 +208,7 @@ class NodeSpecificValidators {
                 this.validateGoogleSheetsDelete(context);
                 break;
         }
+        // Range format validation
         if (config.range) {
             this.validateGoogleSheetsRange(config.range, errors, warnings);
         }
@@ -198,6 +223,7 @@ class NodeSpecificValidators {
                 fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
             });
         }
+        // Check for common append settings
         if (!config.options?.valueInputMode) {
             warnings.push({
                 type: 'missing_common',
@@ -218,6 +244,7 @@ class NodeSpecificValidators {
                 fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
             });
         }
+        // Suggest data structure options
         if (!config.options?.dataStructure) {
             suggestions.push('Consider setting options.dataStructure to "object" for easier data manipulation');
         }
@@ -266,6 +293,7 @@ class NodeSpecificValidators {
         });
     }
     static validateGoogleSheetsRange(range, errors, warnings) {
+        // Check basic format
         if (!range.includes('!')) {
             warnings.push({
                 type: 'inefficient',
@@ -274,6 +302,7 @@ class NodeSpecificValidators {
                 suggestion: 'Format: "SheetName!A1:B10" or "SheetName!A:B"'
             });
         }
+        // Check for common mistakes
         if (range.includes(' ') && !range.match(/^'[^']+'/)) {
             errors.push({
                 type: 'invalid_value',
@@ -282,6 +311,7 @@ class NodeSpecificValidators {
                 fix: 'Use single quotes around sheet name: \'Sheet Name\'!A1:B10'
             });
         }
+        // Validate A1 notation
         const a1Pattern = /^('[^']+'|[^!]+)!([A-Z]+\d*:?[A-Z]*\d*|[A-Z]+:[A-Z]+|\d+:\d+)$/i;
         if (!a1Pattern.test(range)) {
             warnings.push({
@@ -292,10 +322,14 @@ class NodeSpecificValidators {
             });
         }
     }
+    /**
+     * Validate OpenAI node configuration
+     */
     static validateOpenAI(context) {
         const { config, errors, warnings, suggestions } = context;
         const { resource, operation } = config;
         if (resource === 'chat' && operation === 'create') {
+            // Model validation
             if (!config.model) {
                 errors.push({
                     type: 'missing_required',
@@ -305,6 +339,7 @@ class NodeSpecificValidators {
                 });
             }
             else {
+                // Check for deprecated models
                 const deprecatedModels = ['text-davinci-003', 'text-davinci-002'];
                 if (deprecatedModels.includes(config.model)) {
                     warnings.push({
@@ -315,6 +350,7 @@ class NodeSpecificValidators {
                     });
                 }
             }
+            // Message validation
             if (!config.messages && !config.prompt) {
                 errors.push({
                     type: 'missing_required',
@@ -323,6 +359,7 @@ class NodeSpecificValidators {
                     fix: 'Add messages array or use the prompt field'
                 });
             }
+            // Token limit warnings
             if (config.maxTokens && config.maxTokens > 4000) {
                 warnings.push({
                     type: 'inefficient',
@@ -331,6 +368,7 @@ class NodeSpecificValidators {
                     suggestion: 'Consider if you really need more than 4000 tokens'
                 });
             }
+            // Temperature validation
             if (config.temperature !== undefined) {
                 if (config.temperature < 0 || config.temperature > 2) {
                     errors.push({
@@ -343,9 +381,13 @@ class NodeSpecificValidators {
             }
         }
     }
+    /**
+     * Validate MongoDB node configuration
+     */
     static validateMongoDB(context) {
         const { config, errors, warnings } = context;
         const { operation } = config;
+        // Collection is always required
         if (!config.collection) {
             errors.push({
                 type: 'missing_required',
@@ -356,6 +398,7 @@ class NodeSpecificValidators {
         }
         switch (operation) {
             case 'find':
+                // Query validation
                 if (config.query) {
                     try {
                         JSON.parse(config.query);
@@ -401,8 +444,12 @@ class NodeSpecificValidators {
                 break;
         }
     }
+    /**
+     * Validate Webhook node configuration
+     */
     static validateWebhook(context) {
         const { config, errors, warnings, suggestions } = context;
+        // Path validation
         if (!config.path) {
             errors.push({
                 type: 'missing_required',
@@ -413,6 +460,7 @@ class NodeSpecificValidators {
         }
         else {
             const path = config.path;
+            // Check for leading slash
             if (path.startsWith('/')) {
                 warnings.push({
                     type: 'inefficient',
@@ -421,6 +469,7 @@ class NodeSpecificValidators {
                     suggestion: 'Remove the leading slash: use "my-webhook" instead of "/my-webhook"'
                 });
             }
+            // Check for spaces
             if (path.includes(' ')) {
                 errors.push({
                     type: 'invalid_value',
@@ -429,6 +478,7 @@ class NodeSpecificValidators {
                     fix: 'Replace spaces with hyphens or underscores'
                 });
             }
+            // Check for special characters
             if (!/^[a-zA-Z0-9\-_\/]+$/.test(path.replace(/^\//, ''))) {
                 warnings.push({
                     type: 'inefficient',
@@ -438,6 +488,7 @@ class NodeSpecificValidators {
                 });
             }
         }
+        // Response mode validation
         if (config.responseMode === 'responseNode') {
             suggestions.push('Add a "Respond to Webhook" node to send custom responses');
             if (!config.responseData) {
@@ -449,6 +500,7 @@ class NodeSpecificValidators {
                 });
             }
         }
+        // HTTP method validation
         if (config.httpMethod && Array.isArray(config.httpMethod)) {
             if (config.httpMethod.length === 0) {
                 errors.push({
@@ -459,6 +511,7 @@ class NodeSpecificValidators {
                 });
             }
         }
+        // Authentication warnings
         if (!config.authentication || config.authentication === 'none') {
             warnings.push({
                 type: 'security',
@@ -467,12 +520,17 @@ class NodeSpecificValidators {
             });
         }
     }
+    /**
+     * Validate Postgres node configuration
+     */
     static validatePostgres(context) {
         const { config, errors, warnings, suggestions, autofix } = context;
         const { operation } = config;
+        // Common query validation
         if (['execute', 'select', 'insert', 'update', 'delete'].includes(operation)) {
             this.validateSQLQuery(context, 'postgres');
         }
+        // Operation-specific validation
         switch (operation) {
             case 'insert':
                 if (!config.table) {
@@ -539,16 +597,22 @@ class NodeSpecificValidators {
                 }
                 break;
         }
+        // Connection pool suggestions
         if (config.connectionTimeout === undefined) {
             suggestions.push('Consider setting connectionTimeout to handle slow connections');
         }
     }
+    /**
+     * Validate MySQL node configuration
+     */
     static validateMySQL(context) {
         const { config, errors, warnings, suggestions } = context;
         const { operation } = config;
+        // MySQL uses similar validation to Postgres
         if (['execute', 'insert', 'update', 'delete'].includes(operation)) {
             this.validateSQLQuery(context, 'mysql');
         }
+        // Operation-specific validation (similar to Postgres)
         switch (operation) {
             case 'insert':
                 if (!config.table) {
@@ -599,16 +663,21 @@ class NodeSpecificValidators {
                 }
                 break;
         }
+        // MySQL-specific warnings
         if (config.timezone === undefined) {
             suggestions.push('Consider setting timezone to ensure consistent date/time handling');
         }
     }
+    /**
+     * Validate SQL queries for injection risks and common issues
+     */
     static validateSQLQuery(context, dbType = 'generic') {
         const { config, errors, warnings, suggestions } = context;
         const query = config.query || config.deleteQuery || config.updateQuery || '';
         if (!query)
             return;
         const lowerQuery = query.toLowerCase();
+        // SQL injection checks
         if (query.includes('${') || query.includes('{{')) {
             warnings.push({
                 type: 'security',
@@ -617,6 +686,7 @@ class NodeSpecificValidators {
             });
             suggestions.push('Example: Use "SELECT * FROM users WHERE id = $1" with queryParams: [userId]');
         }
+        // DELETE without WHERE
         if (lowerQuery.includes('delete') && !lowerQuery.includes('where')) {
             errors.push({
                 type: 'invalid_value',
@@ -625,6 +695,7 @@ class NodeSpecificValidators {
                 fix: 'Add a WHERE clause to specify which records to delete'
             });
         }
+        // UPDATE without WHERE
         if (lowerQuery.includes('update') && !lowerQuery.includes('where')) {
             warnings.push({
                 type: 'security',
@@ -632,6 +703,7 @@ class NodeSpecificValidators {
                 suggestion: 'Add a WHERE clause to specify which records to update'
             });
         }
+        // TRUNCATE warning
         if (lowerQuery.includes('truncate')) {
             warnings.push({
                 type: 'security',
@@ -639,6 +711,7 @@ class NodeSpecificValidators {
                 suggestion: 'Consider using DELETE with WHERE clause if you need to keep some data'
             });
         }
+        // DROP warning
         if (lowerQuery.includes('drop')) {
             errors.push({
                 type: 'invalid_value',
@@ -647,15 +720,19 @@ class NodeSpecificValidators {
                 fix: 'Use this only if you really intend to delete tables/databases permanently'
             });
         }
+        // Performance suggestions
         if (lowerQuery.includes('select *')) {
             suggestions.push('Consider selecting specific columns instead of * for better performance');
         }
+        // Database-specific checks
         if (dbType === 'postgres') {
+            // PostgreSQL specific validations
             if (query.includes('$$')) {
                 suggestions.push('Dollar-quoted strings detected - ensure they are properly closed');
             }
         }
         else if (dbType === 'mysql') {
+            // MySQL specific validations
             if (query.includes('`')) {
                 suggestions.push('Using backticks for identifiers - ensure they are properly paired');
             }

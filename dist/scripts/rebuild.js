@@ -34,6 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Copyright (c) 2024 AiAdvisors Romuald Czlonkowski
+ * Licensed under the Sustainable Use License v1.0
+ */
 const database_adapter_1 = require("../database/database-adapter");
 const node_loader_1 = require("../loaders/node-loader");
 const node_parser_1 = require("../parsers/node-parser");
@@ -49,12 +53,16 @@ async function rebuild() {
     const parser = new node_parser_1.NodeParser();
     const mapper = new docs_mapper_1.DocsMapper();
     const repository = new node_repository_1.NodeRepository(db);
+    // Initialize database
     const schema = fs.readFileSync(path.join(__dirname, '../../src/database/schema.sql'), 'utf8');
     db.exec(schema);
+    // Clear existing data
     db.exec('DELETE FROM nodes');
     console.log('🗑️  Cleared existing data\n');
+    // Load all nodes
     const nodes = await loader.loadAllNodes();
     console.log(`📦 Loaded ${nodes.length} nodes from packages\n`);
+    // Statistics
     const stats = {
         successful: 0,
         failed: 0,
@@ -65,15 +73,21 @@ async function rebuild() {
         withOperations: 0,
         withDocs: 0
     };
+    // Process each node
     for (const { packageName, nodeName, NodeClass } of nodes) {
         try {
+            // Parse node
             const parsed = parser.parse(NodeClass, packageName);
+            // Validate parsed data
             if (!parsed.nodeType || !parsed.displayName) {
                 throw new Error('Missing required fields');
             }
+            // Get documentation
             const docs = await mapper.fetchDocumentation(parsed.nodeType);
             parsed.documentation = docs || undefined;
+            // Save to database
             repository.saveNode(parsed);
+            // Update statistics
             stats.successful++;
             if (parsed.isAITool)
                 stats.aiTools++;
@@ -94,8 +108,10 @@ async function rebuild() {
             console.error(`❌ Failed to process ${nodeName}: ${error.message}`);
         }
     }
+    // Validation check
     console.log('\n🔍 Running validation checks...');
     const validationResults = validateDatabase(repository);
+    // Summary
     console.log('\n📊 Summary:');
     console.log(`   Total nodes: ${nodes.length}`);
     console.log(`   Successful: ${stats.successful}`);
@@ -110,6 +126,7 @@ async function rebuild() {
         console.log('\n⚠️  Validation Issues:');
         validationResults.issues.forEach(issue => console.log(`   - ${issue}`));
     }
+    // Sanitize templates if they exist
     console.log('\n🧹 Checking for templates to sanitize...');
     const templateCount = db.prepare('SELECT COUNT(*) as count FROM templates').get();
     if (templateCount && templateCount.count > 0) {
@@ -137,6 +154,7 @@ async function rebuild() {
 }
 function validateDatabase(repository) {
     const issues = [];
+    // Check critical nodes
     const criticalNodes = ['nodes-base.httpRequest', 'nodes-base.code', 'nodes-base.webhook', 'nodes-base.slack'];
     for (const nodeType of criticalNodes) {
         const node = repository.getNode(nodeType);
@@ -148,6 +166,7 @@ function validateDatabase(repository) {
             issues.push(`Node ${nodeType} has no properties`);
         }
     }
+    // Check AI tools
     const aiTools = repository.getAITools();
     if (aiTools.length === 0) {
         issues.push('No AI tools found - check detection logic');
@@ -157,6 +176,7 @@ function validateDatabase(repository) {
         issues
     };
 }
+// Run if called directly
 if (require.main === module) {
     rebuild().catch(console.error);
 }

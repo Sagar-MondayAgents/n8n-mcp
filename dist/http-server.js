@@ -6,6 +6,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.loadAuthToken = loadAuthToken;
 exports.startFixedHTTPServer = startFixedHTTPServer;
+/**
+ * Fixed HTTP server for n8n-MCP that properly handles StreamableHTTPServerTransport initialization
+ * This implementation ensures the transport is properly initialized before handling requests
+ */
 const express_1 = __importDefault(require("express"));
 const tools_1 = require("./mcp/tools");
 const tools_n8n_manager_1 = require("./mcp/tools-n8n-manager");
@@ -18,11 +22,16 @@ const fs_1 = require("fs");
 dotenv_1.default.config();
 let expressServer;
 let authToken = null;
+/**
+ * Load auth token from environment variable or file
+ */
 function loadAuthToken() {
+    // First, try AUTH_TOKEN environment variable
     if (process.env.AUTH_TOKEN) {
         logger_1.logger.info('Using AUTH_TOKEN from environment variable');
         return process.env.AUTH_TOKEN;
     }
+    // Then, try AUTH_TOKEN_FILE
     if (process.env.AUTH_TOKEN_FILE) {
         try {
             const token = (0, fs_1.readFileSync)(process.env.AUTH_TOKEN_FILE, 'utf-8').trim();
@@ -38,7 +47,11 @@ function loadAuthToken() {
     }
     return null;
 }
+/**
+ * Validate required environment variables
+ */
 function validateEnvironment() {
+    // Load auth token from env var or file
     authToken = loadAuthToken();
     if (!authToken || authToken.trim() === '') {
         logger_1.logger.error('No authentication token found or token is empty');
@@ -47,12 +60,16 @@ function validateEnvironment() {
         console.error('Generate AUTH_TOKEN with: openssl rand -base64 32');
         process.exit(1);
     }
+    // Update authToken to trimmed version
     authToken = authToken.trim();
     if (authToken.length < 32) {
         logger_1.logger.warn('AUTH_TOKEN should be at least 32 characters for security');
         console.warn('WARNING: AUTH_TOKEN should be at least 32 characters for security');
     }
 }
+/**
+ * Graceful shutdown handler
+ */
 async function shutdown() {
     logger_1.logger.info('Shutting down HTTP server...');
     console.log('Shutting down HTTP server...');
@@ -74,11 +91,14 @@ async function shutdown() {
 async function startFixedHTTPServer() {
     validateEnvironment();
     const app = (0, express_1.default)();
+    // Configure trust proxy for correct IP logging behind reverse proxies
     const trustProxy = process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 0;
     if (trustProxy > 0) {
         app.set('trust proxy', trustProxy);
         logger_1.logger.info(`Trust proxy enabled with ${trustProxy} hop(s)`);
     }
+    // CRITICAL: Don't use any body parser - StreamableHTTPServerTransport needs raw stream
+    // Security headers
     app.use((req, res, next) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'DENY');
@@ -86,6 +106,7 @@ async function startFixedHTTPServer() {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         next();
     });
+    // CORS configuration
     app.use((req, res, next) => {
         const allowedOrigin = process.env.CORS_ORIGIN || '*';
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -98,6 +119,7 @@ async function startFixedHTTPServer() {
         }
         next();
     });
+    // Request logging
     app.use((req, res, next) => {
         logger_1.logger.info(`${req.method} ${req.path}`, {
             ip: req.ip,
@@ -106,8 +128,10 @@ async function startFixedHTTPServer() {
         });
         next();
     });
+    // Create a single persistent MCP server instance
     const mcpServer = new server_1.N8NDocumentationMCPServer();
     logger_1.logger.info('Created persistent MCP server instance');
+    // Health check endpoint
     app.get('/health', (req, res) => {
         res.json({
             status: 'ok',
@@ -122,6 +146,7 @@ async function startFixedHTTPServer() {
             timestamp: new Date().toISOString()
         });
     });
+    // Version endpoint
     app.get('/version', (req, res) => {
         res.json({
             version: version_1.PROJECT_VERSION,
@@ -130,6 +155,7 @@ async function startFixedHTTPServer() {
             commit: process.env.GIT_COMMIT || 'unknown'
         });
     });
+    // Test tools endpoint
     app.get('/test-tools', async (req, res) => {
         try {
             const result = await mcpServer.executeTool('get_node_essentials', { nodeType: 'nodes-base.httpRequest' });
@@ -139,9 +165,12 @@ async function startFixedHTTPServer() {
             res.json({ status: 'error', message: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
+    // Main MCP endpoint - handle each request with custom transport handling
     app.post('/mcp', async (req, res) => {
         const startTime = Date.now();
+        // Enhanced authentication check with specific logging
         const authHeader = req.headers.authorization;
+        // Check if Authorization header is missing
         if (!authHeader) {
             logger_1.logger.warn('Authentication failed: Missing Authorization header', {
                 ip: req.ip,
@@ -158,12 +187,13 @@ async function startFixedHTTPServer() {
             });
             return;
         }
+        // Check if Authorization header has Bearer prefix
         if (!authHeader.startsWith('Bearer ')) {
             logger_1.logger.warn('Authentication failed: Invalid Authorization header format (expected Bearer token)', {
                 ip: req.ip,
                 userAgent: req.get('user-agent'),
                 reason: 'invalid_auth_format',
-                headerPrefix: authHeader.substring(0, 10) + '...'
+                headerPrefix: authHeader.substring(0, 10) + '...' // Log first 10 chars for debugging
             });
             res.status(401).json({
                 jsonrpc: '2.0',
@@ -175,7 +205,9 @@ async function startFixedHTTPServer() {
             });
             return;
         }
+        // Extract token and trim whitespace
         const token = authHeader.slice(7).trim();
+        // Check if token matches
         if (token !== authToken) {
             logger_1.logger.warn('Authentication failed: Invalid token', {
                 ip: req.ip,
@@ -193,6 +225,9 @@ async function startFixedHTTPServer() {
             return;
         }
         try {
+            // Instead of using StreamableHTTPServerTransport, we'll handle the request directly
+            // This avoids the initialization issues with the transport
+            // Collect the raw body
             let body = '';
             req.on('data', chunk => {
                 body += chunk.toString();
@@ -201,6 +236,7 @@ async function startFixedHTTPServer() {
                 try {
                     const jsonRpcRequest = JSON.parse(body);
                     logger_1.logger.debug('Received JSON-RPC request:', { method: jsonRpcRequest.method });
+                    // Handle the request based on method
                     let response;
                     switch (jsonRpcRequest.method) {
                         case 'initialize':
@@ -221,7 +257,9 @@ async function startFixedHTTPServer() {
                             };
                             break;
                         case 'tools/list':
+                            // Use the proper tool list that includes management tools when configured
                             const tools = [...tools_1.n8nDocumentationToolsFinal];
+                            // Add management tools if n8n API is configured
                             if ((0, n8n_api_1.isN8nApiConfigured)()) {
                                 tools.push(...tools_n8n_manager_1.n8nManagementTools);
                             }
@@ -234,6 +272,7 @@ async function startFixedHTTPServer() {
                             };
                             break;
                         case 'tools/call':
+                            // Delegate to the MCP server
                             const toolName = jsonRpcRequest.params?.name;
                             const toolArgs = jsonRpcRequest.params?.arguments || {};
                             try {
@@ -272,6 +311,7 @@ async function startFixedHTTPServer() {
                                 id: jsonRpcRequest.id
                             };
                     }
+                    // Send response
                     res.setHeader('Content-Type', 'application/json');
                     res.json(response);
                     const duration = Date.now() - startTime;
@@ -311,12 +351,14 @@ async function startFixedHTTPServer() {
             }
         }
     });
+    // 404 handler
     app.use((req, res) => {
         res.status(404).json({
             error: 'Not found',
             message: `Cannot ${req.method} ${req.path}`
         });
     });
+    // Error handler
     app.use((err, req, res, next) => {
         logger_1.logger.error('Express error handler:', err);
         if (!res.headersSent) {
@@ -340,6 +382,7 @@ async function startFixedHTTPServer() {
         console.log(`MCP endpoint: http://localhost:${port}/mcp`);
         console.log('\nPress Ctrl+C to stop the server');
     });
+    // Handle errors
     expressServer.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
             logger_1.logger.error(`Port ${port} is already in use`);
@@ -352,8 +395,10 @@ async function startFixedHTTPServer() {
             process.exit(1);
         }
     });
+    // Graceful shutdown handlers
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
+    // Handle uncaught errors
     process.on('uncaughtException', (error) => {
         logger_1.logger.error('Uncaught exception:', error);
         console.error('Uncaught exception:', error);
@@ -365,6 +410,7 @@ async function startFixedHTTPServer() {
         shutdown();
     });
 }
+// Start if called directly
 if (require.main === module) {
     startFixedHTTPServer().catch(error => {
         logger_1.logger.error('Failed to start Fixed HTTP server:', error);

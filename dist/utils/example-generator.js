@@ -1,7 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ExampleGenerator = void 0;
+/**
+ * Generates example workflows and parameters for n8n nodes
+ */
 class ExampleGenerator {
+    /**
+     * Generate an example workflow from node definition
+     */
     static generateFromNodeDefinition(nodeDefinition) {
         const nodeName = nodeDefinition.displayName || 'Example Node';
         const nodeType = nodeDefinition.name || 'n8n-nodes-base.exampleNode';
@@ -23,8 +29,12 @@ class ExampleGenerator {
             tags: ['example', 'generated'],
         };
     }
+    /**
+     * Generate example parameters based on node properties
+     */
     static generateExampleParameters(nodeDefinition) {
         const params = {};
+        // If properties are available, generate examples based on them
         if (Array.isArray(nodeDefinition.properties)) {
             for (const prop of nodeDefinition.properties) {
                 if (prop.name && prop.type) {
@@ -32,6 +42,7 @@ class ExampleGenerator {
                 }
             }
         }
+        // Add common parameters based on node type
         if (nodeDefinition.displayName?.toLowerCase().includes('trigger')) {
             params.pollTimes = {
                 item: [
@@ -43,6 +54,9 @@ class ExampleGenerator {
         }
         return params;
     }
+    /**
+     * Generate example value based on property definition
+     */
     static generateExampleValue(property) {
         switch (property.type) {
             case 'string':
@@ -72,15 +86,22 @@ class ExampleGenerator {
                 return property.default || null;
         }
     }
+    /**
+     * Generate a unique node ID
+     */
     static generateNodeId() {
         return Math.random().toString(36).substring(2, 15) +
             Math.random().toString(36).substring(2, 15);
     }
+    /**
+     * Generate example based on node operations
+     */
     static generateFromOperations(operations) {
         const examples = [];
         if (!operations || operations.length === 0) {
             return examples;
         }
+        // Group operations by resource
         const resourceMap = new Map();
         for (const op of operations) {
             if (!resourceMap.has(op.resource)) {
@@ -88,6 +109,7 @@ class ExampleGenerator {
             }
             resourceMap.get(op.resource).push(op);
         }
+        // Generate example for each resource
         for (const [resource, ops] of resourceMap) {
             examples.push({
                 resource,

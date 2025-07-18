@@ -3,10 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeParser = void 0;
 const property_extractor_1 = require("./property-extractor");
 class NodeParser {
-    constructor() {
-        this.propertyExtractor = new property_extractor_1.PropertyExtractor();
-    }
+    propertyExtractor = new property_extractor_1.PropertyExtractor();
     parse(nodeClass, packageName) {
+        // Get base description (handles versioned nodes)
         const description = this.getNodeDescription(nodeClass);
         return {
             style: this.detectStyle(nodeClass),
@@ -26,26 +25,34 @@ class NodeParser {
         };
     }
     getNodeDescription(nodeClass) {
+        // Try to get description from the class first
         let description;
+        // Check if it's a versioned node (has baseDescription and nodeVersions)
         if (typeof nodeClass === 'function' && nodeClass.prototype &&
             nodeClass.prototype.constructor &&
             nodeClass.prototype.constructor.name === 'VersionedNodeType') {
+            // This is a VersionedNodeType class - instantiate it
             const instance = new nodeClass();
             description = instance.baseDescription || {};
         }
         else if (typeof nodeClass === 'function') {
+            // Try to instantiate to get description
             try {
                 const instance = new nodeClass();
                 description = instance.description || {};
+                // For versioned nodes, we might need to look deeper
                 if (!description.name && instance.baseDescription) {
                     description = instance.baseDescription;
                 }
             }
             catch (e) {
+                // Some nodes might require parameters to instantiate
+                // Try to access static properties
                 description = nodeClass.description || {};
             }
         }
         else {
+            // Maybe it's already an instance
             description = nodeClass.description || {};
         }
         return description;
@@ -55,6 +62,7 @@ class NodeParser {
         return desc.routing ? 'declarative' : 'programmatic';
     }
     extractNodeType(description, packageName) {
+        // Ensure we have the full node type including package prefix
         const name = description.name;
         if (!name) {
             throw new Error('Node is missing name property');
@@ -62,6 +70,7 @@ class NodeParser {
         if (name.includes('.')) {
             return name;
         }
+        // Add package prefix if missing
         const packagePrefix = packageName.replace('@n8n/', '').replace('n8n-', '');
         return `${packagePrefix}.${name}`;
     }
@@ -72,11 +81,13 @@ class NodeParser {
             'misc';
     }
     detectTrigger(description) {
+        // Primary check: group includes 'trigger'
         if (description.group && Array.isArray(description.group)) {
             if (description.group.includes('trigger')) {
                 return true;
             }
         }
+        // Fallback checks for edge cases
         return description.polling === true ||
             description.trigger === true ||
             description.eventTrigger === true ||
@@ -88,22 +99,28 @@ class NodeParser {
             description.name?.toLowerCase().includes('webhook');
     }
     extractVersion(nodeClass) {
+        // Handle VersionedNodeType with defaultVersion
         if (nodeClass.baseDescription?.defaultVersion) {
             return nodeClass.baseDescription.defaultVersion.toString();
         }
+        // Handle VersionedNodeType with nodeVersions
         if (nodeClass.nodeVersions) {
             const versions = Object.keys(nodeClass.nodeVersions);
             return Math.max(...versions.map(Number)).toString();
         }
+        // Check instance for nodeVersions and version arrays
         try {
             const instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
+            // Handle instance-level nodeVersions
             if (instance?.nodeVersions) {
                 const versions = Object.keys(instance.nodeVersions);
                 return Math.max(...versions.map(Number)).toString();
             }
+            // Handle version array in description (e.g., [1, 1.1, 1.2])
             if (instance?.description?.version) {
                 const version = instance.description.version;
                 if (Array.isArray(version)) {
+                    // Find the maximum version from the array
                     const maxVersion = Math.max(...version.map((v) => parseFloat(v.toString())));
                     return maxVersion.toString();
                 }
@@ -113,7 +130,10 @@ class NodeParser {
             }
         }
         catch (e) {
+            // Some nodes might require parameters to instantiate
+            // Try to get version from class-level description
         }
+        // Also check class-level description for version array
         const description = this.getNodeDescription(nodeClass);
         if (description?.version) {
             if (Array.isArray(description.version)) {
@@ -124,23 +144,31 @@ class NodeParser {
                 return description.version.toString();
             }
         }
+        // Default to version 1
         return '1';
     }
     detectVersioned(nodeClass) {
+        // Check class-level nodeVersions
         if (nodeClass.nodeVersions || nodeClass.baseDescription?.defaultVersion) {
             return true;
         }
+        // Check instance-level nodeVersions and version arrays
         try {
             const instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
+            // Check for nodeVersions
             if (instance?.nodeVersions) {
                 return true;
             }
+            // Check for version array in description
             if (instance?.description?.version && Array.isArray(instance.description.version)) {
                 return true;
             }
         }
         catch (e) {
+            // Some nodes might require parameters to instantiate
+            // Try to check class-level description
         }
+        // Also check class-level description for version array
         const description = this.getNodeDescription(nodeClass);
         if (description?.version && Array.isArray(description.version)) {
             return true;

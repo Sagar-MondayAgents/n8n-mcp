@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+/**
+ * Load auth token from environment variable or file
+ */
 export declare function loadAuthToken(): string | null;
 export declare function startFixedHTTPServer(): Promise<void>;
 declare module './mcp/server' {

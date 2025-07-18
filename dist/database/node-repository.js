@@ -2,9 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeRepository = void 0;
 class NodeRepository {
+    db;
     constructor(db) {
         this.db = db;
     }
+    /**
+     * Save node with proper JSON serialization
+     */
     saveNode(node) {
         const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO nodes (
@@ -16,6 +20,9 @@ class NodeRepository {
     `);
         stmt.run(node.nodeType, node.packageName, node.displayName, node.description, node.category, node.style, node.isAITool ? 1 : 0, node.isTrigger ? 1 : 0, node.isWebhook ? 1 : 0, node.isVersioned ? 1 : 0, node.version, node.documentation || null, JSON.stringify(node.properties, null, 2), JSON.stringify(node.operations, null, 2), JSON.stringify(node.credentials, null, 2));
     }
+    /**
+     * Get node with proper JSON deserialization
+     */
     getNode(nodeType) {
         const row = this.db.prepare(`
       SELECT * FROM nodes WHERE node_type = ?
@@ -40,6 +47,9 @@ class NodeRepository {
             hasDocumentation: !!row.documentation
         };
     }
+    /**
+     * Get AI tools with proper filtering
+     */
     getAITools() {
         const rows = this.db.prepare(`
       SELECT node_type, display_name, description, package_name

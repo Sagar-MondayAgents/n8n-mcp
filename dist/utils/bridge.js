@@ -2,20 +2,30 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.N8NMCPBridge = void 0;
 class N8NMCPBridge {
+    /**
+     * Convert n8n workflow data to MCP tool arguments
+     */
     static n8nToMCPToolArgs(data) {
+        // Handle different data formats from n8n
         if (data.json) {
             return data.json;
         }
+        // Remove n8n-specific metadata
         const { pairedItem, ...cleanData } = data;
         return cleanData;
     }
+    /**
+     * Convert MCP tool response to n8n execution data
+     */
     static mcpToN8NExecutionData(mcpResponse, itemIndex = 0) {
+        // Handle MCP content array format
         if (mcpResponse.content && Array.isArray(mcpResponse.content)) {
             const textContent = mcpResponse.content
                 .filter((c) => c.type === 'text')
                 .map((c) => c.text)
                 .join('\n');
             try {
+                // Try to parse as JSON if possible
                 const parsed = JSON.parse(textContent);
                 return {
                     json: parsed,
@@ -23,17 +33,22 @@ class N8NMCPBridge {
                 };
             }
             catch {
+                // Return as text if not JSON
                 return {
                     json: { result: textContent },
                     pairedItem: itemIndex,
                 };
             }
         }
+        // Handle direct object response
         return {
             json: mcpResponse,
             pairedItem: itemIndex,
         };
     }
+    /**
+     * Convert n8n workflow definition to MCP-compatible format
+     */
     static n8nWorkflowToMCP(workflow) {
         return {
             id: workflow.id,
@@ -55,6 +70,9 @@ class N8NMCPBridge {
             },
         };
     }
+    /**
+     * Convert MCP workflow format to n8n-compatible format
+     */
     static mcpToN8NWorkflow(mcpWorkflow) {
         return {
             name: mcpWorkflow.name,
@@ -67,6 +85,9 @@ class N8NMCPBridge {
             pinData: {},
         };
     }
+    /**
+     * Convert n8n execution data to MCP resource format
+     */
     static n8nExecutionToMCPResource(execution) {
         return {
             uri: `execution://${execution.id}`,
@@ -85,6 +106,9 @@ class N8NMCPBridge {
             },
         };
     }
+    /**
+     * Convert MCP prompt arguments to n8n-compatible format
+     */
     static mcpPromptArgsToN8N(promptArgs) {
         return {
             prompt: promptArgs.name || '',
@@ -92,6 +116,9 @@ class N8NMCPBridge {
             messages: promptArgs.messages || [],
         };
     }
+    /**
+     * Validate and sanitize data before conversion
+     */
     static sanitizeData(data) {
         if (data === null || data === undefined) {
             return {};
@@ -99,6 +126,7 @@ class N8NMCPBridge {
         if (typeof data !== 'object') {
             return { value: data };
         }
+        // Remove circular references
         const seen = new WeakSet();
         return JSON.parse(JSON.stringify(data, (_key, value) => {
             if (typeof value === 'object' && value !== null) {
@@ -110,6 +138,9 @@ class N8NMCPBridge {
             return value;
         }));
     }
+    /**
+     * Extract error information for both n8n and MCP formats
+     */
     static formatError(error) {
         return {
             message: error.message || 'Unknown error',

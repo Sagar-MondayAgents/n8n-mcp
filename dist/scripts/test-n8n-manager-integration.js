@@ -5,9 +5,11 @@ const dotenv_1 = require("dotenv");
 const logger_1 = require("../utils/logger");
 const n8n_api_1 = require("../config/n8n-api");
 const handlers_n8n_manager_1 = require("../mcp/handlers-n8n-manager");
+// Load environment variables
 (0, dotenv_1.config)();
 async function testN8nManagerIntegration() {
     logger_1.logger.info('Testing n8n Manager Integration...');
+    // Check if API is configured
     if (!(0, n8n_api_1.isN8nApiConfigured)()) {
         logger_1.logger.warn('n8n API not configured. Set N8N_API_URL and N8N_API_KEY to test.');
         logger_1.logger.info('Example:');
@@ -26,15 +28,18 @@ async function testN8nManagerIntegration() {
         return;
     }
     try {
+        // Test 1: Health Check
         logger_1.logger.info('\n=== Test 1: Health Check ===');
         const health = await client.healthCheck();
         logger_1.logger.info('Health check passed:', health);
+        // Test 2: List Workflows
         logger_1.logger.info('\n=== Test 2: List Workflows ===');
         const workflows = await client.listWorkflows({ limit: 5 });
         logger_1.logger.info(`Found ${workflows.data.length} workflows`);
         workflows.data.forEach(wf => {
             logger_1.logger.info(`- ${wf.name} (ID: ${wf.id}, Active: ${wf.active})`);
         });
+        // Test 3: Create a Test Workflow
         logger_1.logger.info('\n=== Test 3: Create Test Workflow ===');
         const testWorkflow = {
             name: `Test Workflow - MCP Integration ${Date.now()}`,
@@ -84,6 +89,7 @@ async function testN8nManagerIntegration() {
             name: createdWorkflow.name,
             active: createdWorkflow.active
         });
+        // Test 4: Get Workflow Details
         logger_1.logger.info('\n=== Test 4: Get Workflow Details ===');
         const workflowDetails = await client.getWorkflow(createdWorkflow.id);
         logger_1.logger.info('Retrieved workflow:', {
@@ -91,7 +97,9 @@ async function testN8nManagerIntegration() {
             name: workflowDetails.name,
             nodeCount: workflowDetails.nodes.length
         });
+        // Test 5: Update Workflow
         logger_1.logger.info('\n=== Test 5: Update Workflow ===');
+        // n8n API requires full workflow structure for updates
         const updatedWorkflow = await client.updateWorkflow(createdWorkflow.id, {
             name: `${createdWorkflow.name} - Updated`,
             nodes: workflowDetails.nodes,
@@ -99,12 +107,14 @@ async function testN8nManagerIntegration() {
             settings: workflowDetails.settings
         });
         logger_1.logger.info('Updated workflow name:', updatedWorkflow.name);
+        // Test 6: List Executions
         logger_1.logger.info('\n=== Test 6: List Recent Executions ===');
         const executions = await client.listExecutions({ limit: 5 });
         logger_1.logger.info(`Found ${executions.data.length} recent executions`);
         executions.data.forEach(exec => {
             logger_1.logger.info(`- Workflow: ${exec.workflowName || exec.workflowId}, Status: ${exec.status}, Started: ${exec.startedAt}`);
         });
+        // Test 7: Cleanup - Delete Test Workflow
         logger_1.logger.info('\n=== Test 7: Cleanup ===');
         await client.deleteWorkflow(createdWorkflow.id);
         logger_1.logger.info('Deleted test workflow');
@@ -115,6 +125,7 @@ async function testN8nManagerIntegration() {
         process.exit(1);
     }
 }
+// Run tests
 testN8nManagerIntegration().catch(error => {
     logger_1.logger.error('Unhandled error:', error);
     process.exit(1);

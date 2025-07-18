@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Debug test for n8n_update_partial_workflow
+ * Tests the actual update path to identify the issue
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = require("dotenv");
 const logger_1 = require("../utils/logger");
 const n8n_api_1 = require("../config/n8n-api");
 const handlers_workflow_diff_1 = require("../mcp/handlers-workflow-diff");
 const handlers_n8n_manager_1 = require("../mcp/handlers-n8n-manager");
+// Load environment variables
 (0, dotenv_1.config)();
 async function testUpdatePartialDebug() {
     logger_1.logger.info('Debug test for n8n_update_partial_workflow...');
+    // Check if API is configured
     if (!(0, n8n_api_1.isN8nApiConfigured)()) {
         logger_1.logger.warn('n8n API not configured. This test requires a real n8n instance.');
         logger_1.logger.info('Set N8N_API_URL and N8N_API_KEY to test.');
@@ -20,6 +26,7 @@ async function testUpdatePartialDebug() {
         return;
     }
     try {
+        // First, create a test workflow
         logger_1.logger.info('\n=== Creating test workflow ===');
         const testWorkflow = {
             name: `Test Partial Update ${Date.now()}`,
@@ -62,6 +69,7 @@ async function testUpdatePartialDebug() {
             id: createdWorkflow.id,
             name: createdWorkflow.name
         });
+        // Now test partial update WITHOUT validateOnly
         logger_1.logger.info('\n=== Testing partial update (NO validateOnly) ===');
         const updateRequest = {
             id: createdWorkflow.id,
@@ -71,10 +79,12 @@ async function testUpdatePartialDebug() {
                     name: 'Updated via Partial Update'
                 }
             ]
+            // Note: NO validateOnly flag
         };
         logger_1.logger.info('Update request:', JSON.stringify(updateRequest, null, 2));
         const result = await (0, handlers_workflow_diff_1.handleUpdatePartialWorkflow)(updateRequest);
         logger_1.logger.info('Update result:', JSON.stringify(result, null, 2));
+        // Cleanup - delete test workflow
         if (createdWorkflow.id) {
             logger_1.logger.info('\n=== Cleanup ===');
             await client.deleteWorkflow(createdWorkflow.id);
@@ -85,6 +95,7 @@ async function testUpdatePartialDebug() {
         logger_1.logger.error('Test failed:', error);
     }
 }
+// Run test
 testUpdatePartialDebug().catch(error => {
     logger_1.logger.error('Unhandled error:', error);
     process.exit(1);

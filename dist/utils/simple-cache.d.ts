@@ -1,3 +1,7 @@
+/**
+ * Simple in-memory cache with TTL support
+ * No external dependencies needed
+ */
 export declare class SimpleCache {
     private cache;
     constructor();

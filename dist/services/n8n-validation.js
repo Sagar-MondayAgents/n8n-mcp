@@ -12,6 +12,7 @@ exports.getWebhookUrl = getWebhookUrl;
 exports.getWorkflowStructureExample = getWorkflowStructureExample;
 exports.getWorkflowFixSuggestions = getWorkflowFixSuggestions;
 const zod_1 = require("zod");
+// Zod schemas for n8n API validation
 exports.workflowNodeSchema = zod_1.z.object({
     id: zod_1.z.string(),
     name: zod_1.z.string(),
@@ -47,6 +48,7 @@ exports.workflowSettingsSchema = zod_1.z.object({
     executionTimeout: zod_1.z.number().optional(),
     errorWorkflow: zod_1.z.string().optional(),
 });
+// Default settings for workflow creation
 exports.defaultWorkflowSettings = {
     executionOrder: 'v1',
     saveDataErrorExecution: 'all',
@@ -54,6 +56,7 @@ exports.defaultWorkflowSettings = {
     saveManualExecutions: true,
     saveExecutionProgress: true,
 };
+// Validation functions
 function validateWorkflowNode(node) {
     return exports.workflowNodeSchema.parse(node);
 }
@@ -63,22 +66,41 @@ function validateWorkflowConnections(connections) {
 function validateWorkflowSettings(settings) {
     return exports.workflowSettingsSchema.parse(settings);
 }
+// Clean workflow data for API operations
 function cleanWorkflowForCreate(workflow) {
-    const { id, createdAt, updatedAt, versionId, meta, active, tags, ...cleanedWorkflow } = workflow;
+    const { 
+    // Remove read-only fields
+    id, createdAt, updatedAt, versionId, meta, 
+    // Remove fields that cause API errors during creation
+    active, tags, 
+    // Keep everything else
+    ...cleanedWorkflow } = workflow;
+    // Ensure settings are present with defaults
     if (!cleanedWorkflow.settings) {
         cleanedWorkflow.settings = exports.defaultWorkflowSettings;
     }
     return cleanedWorkflow;
 }
 function cleanWorkflowForUpdate(workflow) {
-    const { id, createdAt, updatedAt, versionId, meta, staticData, pinData, tags, isArchived, usedCredentials, sharedWithProjects, triggerCount, shared, active, ...cleanedWorkflow } = workflow;
+    const { 
+    // Remove read-only/computed fields
+    id, createdAt, updatedAt, versionId, meta, staticData, 
+    // Remove fields that cause API errors
+    pinData, tags, 
+    // Remove additional fields that n8n API doesn't accept
+    isArchived, usedCredentials, sharedWithProjects, triggerCount, shared, active, 
+    // Keep everything else
+    ...cleanedWorkflow } = workflow;
+    // Ensure settings are present
     if (!cleanedWorkflow.settings) {
         cleanedWorkflow.settings = exports.defaultWorkflowSettings;
     }
     return cleanedWorkflow;
 }
+// Validate workflow structure
 function validateWorkflowStructure(workflow) {
     const errors = [];
+    // Check required fields
     if (!workflow.name) {
         errors.push('Workflow name is required');
     }
@@ -88,6 +110,7 @@ function validateWorkflowStructure(workflow) {
     if (!workflow.connections) {
         errors.push('Workflow connections are required');
     }
+    // Check for minimum viable workflow
     if (workflow.nodes && workflow.nodes.length === 1) {
         const singleNode = workflow.nodes[0];
         const isWebhookOnly = singleNode.type === 'n8n-nodes-base.webhook' ||
@@ -96,16 +119,19 @@ function validateWorkflowStructure(workflow) {
             errors.push('Single-node workflows are only valid for webhooks. Add at least one more node and connect them. Example: Manual Trigger → Set node');
         }
     }
+    // Check for empty connections in multi-node workflows
     if (workflow.nodes && workflow.nodes.length > 1 && workflow.connections) {
         const connectionCount = Object.keys(workflow.connections).length;
         if (connectionCount === 0) {
             errors.push('Multi-node workflow has empty connections. Connect nodes like this: connections: { "Node1 Name": { "main": [[{ "node": "Node2 Name", "type": "main", "index": 0 }]] } }');
         }
     }
+    // Validate nodes
     if (workflow.nodes) {
         workflow.nodes.forEach((node, index) => {
             try {
                 validateWorkflowNode(node);
+                // Additional check for common node type mistakes
                 if (node.type.startsWith('nodes-base.')) {
                     errors.push(`Invalid node type "${node.type}" at index ${index}. Use "n8n-nodes-base.${node.type.substring(11)}" instead.`);
                 }
@@ -118,6 +144,7 @@ function validateWorkflowStructure(workflow) {
             }
         });
     }
+    // Validate connections
     if (workflow.connections) {
         try {
             validateWorkflowConnections(workflow.connections);
@@ -126,12 +153,15 @@ function validateWorkflowStructure(workflow) {
             errors.push(`Invalid connections: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
+    // Validate that all connection references exist and use node NAMES (not IDs)
     if (workflow.nodes && workflow.connections) {
         const nodeNames = new Set(workflow.nodes.map(node => node.name));
         const nodeIds = new Set(workflow.nodes.map(node => node.id));
         const nodeIdToName = new Map(workflow.nodes.map(node => [node.id, node.name]));
         Object.entries(workflow.connections).forEach(([sourceName, connection]) => {
+            // Check if source exists by name (correct)
             if (!nodeNames.has(sourceName)) {
+                // Check if they're using an ID instead of name
                 if (nodeIds.has(sourceName)) {
                     const correctName = nodeIdToName.get(sourceName);
                     errors.push(`Connection uses node ID '${sourceName}' but must use node name '${correctName}'. Change connections.${sourceName} to connections['${correctName}']`);
@@ -142,7 +172,9 @@ function validateWorkflowStructure(workflow) {
             }
             connection.main.forEach((outputs, outputIndex) => {
                 outputs.forEach((target, targetIndex) => {
+                    // Check if target exists by name (correct)
                     if (!nodeNames.has(target.node)) {
+                        // Check if they're using an ID instead of name
                         if (nodeIds.has(target.node)) {
                             const correctName = nodeIdToName.get(target.node);
                             errors.push(`Connection target uses node ID '${target.node}' but must use node name '${correctName}' (from ${sourceName}[${outputIndex}][${targetIndex}])`);
@@ -157,22 +189,28 @@ function validateWorkflowStructure(workflow) {
     }
     return errors;
 }
+// Check if workflow has webhook trigger
 function hasWebhookTrigger(workflow) {
     return workflow.nodes.some(node => node.type === 'n8n-nodes-base.webhook' ||
         node.type === 'n8n-nodes-base.webhookTrigger');
 }
+// Get webhook URL from workflow
 function getWebhookUrl(workflow) {
     const webhookNode = workflow.nodes.find(node => node.type === 'n8n-nodes-base.webhook' ||
         node.type === 'n8n-nodes-base.webhookTrigger');
     if (!webhookNode || !webhookNode.parameters) {
         return null;
     }
+    // Check for path parameter
     const path = webhookNode.parameters.path;
     if (!path) {
         return null;
     }
+    // Note: We can't construct the full URL without knowing the n8n instance URL
+    // The caller will need to prepend the base URL
     return path;
 }
+// Helper function to generate proper workflow structure examples
 function getWorkflowStructureExample() {
     return `
 Minimal Workflow Example:
@@ -219,6 +257,7 @@ Minimal Workflow Example:
 
 IMPORTANT: In connections, use the node NAME (e.g., "Manual Trigger"), NOT the node ID or type!`;
 }
+// Helper function to fix common workflow issues
 function getWorkflowFixSuggestions(errors) {
     const suggestions = [];
     if (errors.some(e => e.includes('empty connections'))) {

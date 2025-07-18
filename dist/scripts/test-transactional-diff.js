@@ -1,8 +1,13 @@
 "use strict";
+/**
+ * Test script for transactional workflow diff operations
+ * Tests the two-pass processing approach
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 const workflow_diff_engine_1 = require("../services/workflow-diff-engine");
 const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[TestTransactionalDiff]' });
+// Create a test workflow
 const testWorkflow = {
     id: 'test-workflow-123',
     name: 'Test Workflow',
@@ -32,6 +37,7 @@ async function testAddNodesAndConnect() {
     const request = {
         id: testWorkflow.id,
         operations: [
+            // Add connections first (would fail in old implementation)
             {
                 type: 'addConnection',
                 source: 'Webhook',
@@ -42,6 +48,7 @@ async function testAddNodesAndConnect() {
                 source: 'Process Data',
                 target: 'Send Email'
             },
+            // Then add the nodes (two-pass will process these first)
             {
                 type: 'addNode',
                 node: {
@@ -76,6 +83,7 @@ async function testAddNodesAndConnect() {
     if (result.success) {
         logger.info('✅ Test passed! Operations applied successfully');
         logger.info(`Message: ${result.message}`);
+        // Verify nodes were added
         const workflow = result.workflow;
         const hasProcessData = workflow.nodes.some((n) => n.name === 'Process Data');
         const hasSendEmail = workflow.nodes.some((n) => n.name === 'Send Email');
@@ -85,6 +93,7 @@ async function testAddNodesAndConnect() {
         else {
             logger.error('❌ Nodes were not added correctly');
         }
+        // Verify connections were made
         const webhookConnections = workflow.connections['Webhook'];
         const processConnections = workflow.connections['Process Data'];
         if (webhookConnections && processConnections) {
@@ -127,6 +136,7 @@ async function testValidateOnly() {
     const request = {
         id: testWorkflow.id,
         operations: [
+            // Test with connection first - two-pass should handle this
             {
                 type: 'addConnection',
                 source: 'Webhook',
@@ -159,6 +169,7 @@ async function testValidateOnly() {
     if (result.success) {
         logger.info('✅ Validate-only mode works correctly');
         logger.info(`Validation message: ${result.message}`);
+        // Verify original workflow wasn't modified
         if (testWorkflow.nodes.length === 1) {
             logger.info('✅ Original workflow unchanged');
         }
@@ -177,6 +188,7 @@ async function testMixedOperations() {
     const request = {
         id: testWorkflow.id,
         operations: [
+            // Update existing node
             {
                 type: 'updateNode',
                 nodeName: 'Webhook',
@@ -184,6 +196,7 @@ async function testMixedOperations() {
                     'parameters.path': '/updated-path'
                 }
             },
+            // Add new node
             {
                 type: 'addNode',
                 node: {
@@ -198,11 +211,13 @@ async function testMixedOperations() {
                     }
                 }
             },
+            // Connect them
             {
                 type: 'addConnection',
                 source: 'Webhook',
                 target: 'Logger'
             },
+            // Update workflow settings
             {
                 type: 'updateSettings',
                 settings: {
@@ -221,6 +236,7 @@ async function testMixedOperations() {
         logger.error('Errors:', result.errors);
     }
 }
+// Run all tests
 async function runTests() {
     logger.info('Starting transactional diff tests...\n');
     try {
@@ -234,6 +250,7 @@ async function runTests() {
         logger.error('Test suite failed:', error);
     }
 }
+// Run tests if this file is executed directly
 if (require.main === module) {
     runTests().catch(console.error);
 }

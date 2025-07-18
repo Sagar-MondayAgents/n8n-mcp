@@ -34,6 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Optimized rebuild script that extracts and stores source code at build time
+ * This eliminates the need for n8n packages at runtime
+ */
 const database_adapter_1 = require("../database/database-adapter");
 const node_loader_1 = require("../loaders/node-loader");
 const node_parser_1 = require("../parsers/node-parser");
@@ -43,6 +47,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 async function extractNodeSource(NodeClass, packageName, nodeName) {
     try {
+        // Multiple possible paths for node files
         const possiblePaths = [
             `${packageName}/dist/nodes/${nodeName}.node.js`,
             `${packageName}/dist/nodes/${nodeName}/${nodeName}.node.js`,
@@ -51,6 +56,7 @@ async function extractNodeSource(NodeClass, packageName, nodeName) {
         ];
         let nodeFilePath = null;
         let nodeSourceCode = '// Source code not found';
+        // Try each possible path
         for (const path of possiblePaths) {
             try {
                 nodeFilePath = require.resolve(path);
@@ -58,12 +64,15 @@ async function extractNodeSource(NodeClass, packageName, nodeName) {
                 break;
             }
             catch (e) {
+                // Continue to next path
             }
         }
+        // If still not found, use NodeClass constructor source
         if (nodeSourceCode === '// Source code not found' && NodeClass.toString) {
             nodeSourceCode = `// Extracted from NodeClass\n${NodeClass.toString()}`;
             nodeFilePath = 'extracted-from-class';
         }
+        // Try to find credential file
         let credentialSourceCode;
         try {
             const credName = nodeName.replace(/Node$/, '');
@@ -79,10 +88,12 @@ async function extractNodeSource(NodeClass, packageName, nodeName) {
                     break;
                 }
                 catch (e) {
+                    // Continue to next path
                 }
             }
         }
         catch (error) {
+            // Credential file not found, which is fine
         }
         return {
             nodeSourceCode,
@@ -106,13 +117,17 @@ async function rebuildOptimized() {
     const parser = new node_parser_1.NodeParser();
     const mapper = new docs_mapper_1.DocsMapper();
     const repository = new node_repository_1.NodeRepository(db);
+    // Initialize database with optimized schema
     const schemaPath = path.join(__dirname, '../../src/database/schema-optimized.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
     db.exec(schema);
+    // Clear existing data
     db.exec('DELETE FROM nodes');
     console.log('🗑️  Cleared existing data\n');
+    // Load all nodes
     const nodes = await loader.loadAllNodes();
     console.log(`📦 Loaded ${nodes.length} nodes from packages\n`);
+    // Statistics
     const stats = {
         successful: 0,
         failed: 0,
@@ -124,25 +139,32 @@ async function rebuildOptimized() {
         withDocs: 0,
         withSource: 0
     };
+    // Process each node
     for (const { packageName, nodeName, NodeClass } of nodes) {
         try {
+            // Parse node
             const parsed = parser.parse(NodeClass, packageName);
+            // Validate parsed data
             if (!parsed.nodeType || !parsed.displayName) {
                 throw new Error('Missing required fields');
             }
+            // Get documentation
             const docs = await mapper.fetchDocumentation(parsed.nodeType);
             parsed.documentation = docs || undefined;
+            // Extract source code at build time
             console.log(`📄 Extracting source code for ${parsed.nodeType}...`);
             const sourceInfo = await extractNodeSource(NodeClass, packageName, nodeName);
+            // Prepare the full node data with source code
             const nodeData = {
                 ...parsed,
-                developmentStyle: parsed.style,
-                credentialsRequired: parsed.credentials || [],
+                developmentStyle: parsed.style, // Map 'style' to 'developmentStyle'
+                credentialsRequired: parsed.credentials || [], // Map 'credentials' to 'credentialsRequired'
                 nodeSourceCode: sourceInfo.nodeSourceCode,
                 credentialSourceCode: sourceInfo.credentialSourceCode,
                 sourceLocation: sourceInfo.sourceLocation,
                 sourceExtractedAt: new Date().toISOString()
             };
+            // Save to database with source code
             const stmt = db.prepare(`
         INSERT INTO nodes (
           node_type, package_name, display_name, description, category,
@@ -152,6 +174,7 @@ async function rebuildOptimized() {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
             stmt.run(nodeData.nodeType, nodeData.packageName, nodeData.displayName, nodeData.description, nodeData.category, nodeData.developmentStyle, nodeData.isAITool ? 1 : 0, nodeData.isTrigger ? 1 : 0, nodeData.isWebhook ? 1 : 0, nodeData.isVersioned ? 1 : 0, nodeData.version, nodeData.documentation, JSON.stringify(nodeData.properties), JSON.stringify(nodeData.operations), JSON.stringify(nodeData.credentialsRequired), nodeData.nodeSourceCode, nodeData.credentialSourceCode, nodeData.sourceLocation, nodeData.sourceExtractedAt);
+            // Update statistics
             stats.successful++;
             if (parsed.isAITool)
                 stats.aiTools++;
@@ -174,8 +197,10 @@ async function rebuildOptimized() {
             console.error(`❌ Failed to process ${nodeName}: ${error.message}`);
         }
     }
+    // Create FTS index
     console.log('\n🔍 Building full-text search index...');
     db.exec('INSERT INTO nodes_fts(nodes_fts) VALUES("rebuild")');
+    // Summary
     console.log('\n📊 Summary:');
     console.log(`   Total nodes: ${nodes.length}`);
     console.log(`   Successful: ${stats.successful}`);
@@ -187,11 +212,13 @@ async function rebuildOptimized() {
     console.log(`   With Operations: ${stats.withOperations}`);
     console.log(`   With Documentation: ${stats.withDocs}`);
     console.log(`   With Source Code: ${stats.withSource}`);
+    // Database size check
     const dbStats = db.prepare('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()').get();
     console.log(`\n💾 Database size: ${(dbStats.size / 1024 / 1024).toFixed(2)} MB`);
     console.log('\n✨ Optimized rebuild complete!');
     db.close();
 }
+// Run if called directly
 if (require.main === module) {
     rebuildOptimized().catch(console.error);
 }

@@ -5,41 +5,53 @@ class SimpleParser {
     parse(nodeClass) {
         let description;
         let isVersioned = false;
+        // Try to get description from the class
         try {
+            // Check if it's a versioned node (has baseDescription and nodeVersions)
             if (typeof nodeClass === 'function' && nodeClass.prototype &&
                 nodeClass.prototype.constructor &&
                 nodeClass.prototype.constructor.name === 'VersionedNodeType') {
+                // This is a VersionedNodeType class - instantiate it
                 const instance = new nodeClass();
                 description = instance.baseDescription || {};
                 isVersioned = true;
+                // For versioned nodes, try to get properties from the current version
                 if (instance.nodeVersions && instance.currentVersion) {
                     const currentVersionNode = instance.nodeVersions[instance.currentVersion];
                     if (currentVersionNode && currentVersionNode.description) {
+                        // Merge baseDescription with version-specific description
                         description = { ...description, ...currentVersionNode.description };
                     }
                 }
             }
             else if (typeof nodeClass === 'function') {
+                // Try to instantiate to get description
                 try {
                     const instance = new nodeClass();
                     description = instance.description || {};
+                    // For versioned nodes, we might need to look deeper
                     if (!description.name && instance.baseDescription) {
                         description = instance.baseDescription;
                         isVersioned = true;
                     }
                 }
                 catch (e) {
+                    // Some nodes might require parameters to instantiate
+                    // Try to access static properties or look for common patterns
                     description = {};
                 }
             }
             else {
+                // Maybe it's already an instance
                 description = nodeClass.description || {};
             }
         }
         catch (error) {
+            // If instantiation fails, try to get static description
             description = nodeClass.description || {};
         }
         const isDeclarative = !!description.routing;
+        // Ensure we have a valid nodeType
         if (!description.name) {
             throw new Error('Node is missing name property');
         }
@@ -60,19 +72,24 @@ class SimpleParser {
         };
     }
     detectTrigger(description) {
+        // Primary check: group includes 'trigger'
         if (description.group && Array.isArray(description.group)) {
             if (description.group.includes('trigger')) {
                 return true;
             }
         }
+        // Fallback checks for edge cases
         return description.polling === true ||
             description.trigger === true ||
             description.eventTrigger === true ||
             description.name?.toLowerCase().includes('trigger');
     }
     extractOperations(routing) {
+        // Simple extraction without complex logic
         const operations = [];
+        // Try different locations where operations might be defined
         if (routing?.request) {
+            // Check for resources
             const resources = routing.request.resource?.options || [];
             resources.forEach((resource) => {
                 operations.push({
@@ -80,6 +97,7 @@ class SimpleParser {
                     name: resource.name
                 });
             });
+            // Check for operations within resources
             const operationOptions = routing.request.operation?.options || [];
             operationOptions.forEach((operation) => {
                 operations.push({
@@ -88,6 +106,7 @@ class SimpleParser {
                 });
             });
         }
+        // Also check if operations are defined at the top level
         if (routing?.operations) {
             Object.entries(routing.operations).forEach(([key, value]) => {
                 operations.push({
@@ -103,8 +122,10 @@ class SimpleParser {
         if (!description.properties || !Array.isArray(description.properties)) {
             return operations;
         }
+        // Find resource property
         const resourceProp = description.properties.find((p) => p.name === 'resource' && p.type === 'options');
         if (resourceProp && resourceProp.options) {
+            // Extract resources
             resourceProp.options.forEach((resource) => {
                 operations.push({
                     type: 'resource',
@@ -113,10 +134,12 @@ class SimpleParser {
                 });
             });
         }
+        // Find operation properties for each resource
         const operationProps = description.properties.filter((p) => p.name === 'operation' && p.type === 'options' && p.displayOptions);
         operationProps.forEach((opProp) => {
             if (opProp.options) {
                 opProp.options.forEach((operation) => {
+                    // Try to determine which resource this operation belongs to
                     const resourceCondition = opProp.displayOptions?.show?.resource;
                     const resources = Array.isArray(resourceCondition) ? resourceCondition : [resourceCondition];
                     operations.push({
@@ -138,20 +161,25 @@ class SimpleParser {
         return nodeClass.description?.version || '1';
     }
     isVersionedNode(nodeClass) {
+        // Check for VersionedNodeType pattern
         if (nodeClass.baseDescription && nodeClass.nodeVersions) {
             return true;
         }
+        // Check for inline versioning pattern (like Code node)
         try {
             const instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
             const description = instance.description || {};
+            // If version is an array, it's versioned
             if (Array.isArray(description.version)) {
                 return true;
             }
+            // If it has defaultVersion, it's likely versioned
             if (description.defaultVersion !== undefined) {
                 return true;
             }
         }
         catch (e) {
+            // Ignore instantiation errors
         }
         return false;
     }

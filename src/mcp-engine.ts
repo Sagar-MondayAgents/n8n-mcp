@@ -1,13 +1,13 @@
 /**
  * N8N MCP Engine - Clean interface for service integration
- * 
- * This class provides a simple API for integrating the n8n-MCP server
- * into larger services. The wrapping service handles authentication,
- * multi-tenancy, rate limiting, etc.
+ * Now with Streamable HTTP support
  */
 import { Request, Response } from 'express';
 import { SingleSessionHTTPServer } from './http-server-single-session';
 import { logger } from './utils/logger';
+import { N8NDocumentationMCPServer } from './mcp/server';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { TransportType, EngineConfig } from './types/transport.types';
 
 export interface EngineHealth {
   status: 'healthy' | 'unhealthy';
@@ -19,20 +19,23 @@ export interface EngineHealth {
     unit: string;
   };
   version: string;
+  transportSupport: TransportType[];
 }
 
-export interface EngineOptions {
-  sessionTimeout?: number;
-  logLevel?: string;
+export interface EngineOptions extends EngineConfig {
+  transportType?: TransportType;
 }
 
 export class N8NMCPEngine {
   private server: SingleSessionHTTPServer;
   private startTime: Date;
+  private transportType: TransportType;
+  private streamableHTTPServer?: N8NDocumentationMCPServer;
   
   constructor(options: EngineOptions = {}) {
     this.server = new SingleSessionHTTPServer();
     this.startTime = new Date();
+    this.transportType = options.transportType || 'http';
     
     if (options.logLevel) {
       process.env.LOG_LEVEL = options.logLevel;
@@ -40,17 +43,7 @@ export class N8NMCPEngine {
   }
   
   /**
-   * Process a single MCP request
-   * The wrapping service handles authentication, multi-tenancy, etc.
-   * 
-   * @example
-   * // In your service
-   * const engine = new N8NMCPEngine();
-   * 
-   * app.post('/api/users/:userId/mcp', authenticate, async (req, res) => {
-   *   // Your service handles auth, rate limiting, user context
-   *   await engine.processRequest(req, res);
-   * });
+   * Process a single MCP request (legacy HTTP mode)
    */
   async processRequest(req: Request, res: Response): Promise<void> {
     try {
@@ -62,13 +55,54 @@ export class N8NMCPEngine {
   }
   
   /**
-   * Health check for service monitoring
+   * Process a Streamable HTTP request
+   * This is the new recommended transport method
    * 
    * @example
-   * app.get('/health', async (req, res) => {
-   *   const health = await engine.healthCheck();
-   *   res.status(health.status === 'healthy' ? 200 : 503).json(health);
+   * app.post('/mcp', async (req, res) => {
+   *   await engine.processStreamableHTTP(req, res);
    * });
+   */
+  async processStreamableHTTP(req: Request, res: Response): Promise<void> {
+    try {
+      // Create a new server instance for each request to ensure isolation
+      const server = new N8NDocumentationMCPServer();
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined, // Use default session ID generation
+      });
+      
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+      
+      logger.debug('Streamable HTTP request processed successfully');
+    } catch (error) {
+      logger.error('Engine processStreamableHTTP error:', error);
+      
+      // Ensure proper error response
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal error',
+            data: error instanceof Error ? error.message : 'Unknown error'
+          }
+        });
+      }
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Get transport capabilities
+   */
+  getTransportCapabilities(): TransportType[] {
+    return ['stdio', 'http', 'sse', 'streamable-http'];
+  }
+  
+  /**
+   * Health check for service monitoring
    */
   async healthCheck(): Promise<EngineHealth> {
     try {
@@ -84,7 +118,8 @@ export class N8NMCPEngine {
           total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
           unit: 'MB'
         },
-        version: '2.3.2'
+        version: '2.3.2',
+        transportSupport: this.getTransportCapabilities()
       };
     } catch (error) {
       logger.error('Health check failed:', error);
@@ -93,14 +128,14 @@ export class N8NMCPEngine {
         uptime: 0,
         sessionActive: false,
         memoryUsage: { used: 0, total: 0, unit: 'MB' },
-        version: '2.3.2'
+        version: '2.3.2',
+        transportSupport: []
       };
     }
   }
   
   /**
    * Get current session information
-   * Useful for monitoring and debugging
    */
   getSessionInfo(): { active: boolean; sessionId?: string; age?: number } {
     return this.server.getSessionInfo();
@@ -108,12 +143,6 @@ export class N8NMCPEngine {
   
   /**
    * Graceful shutdown for service lifecycle
-   * 
-   * @example
-   * process.on('SIGTERM', async () => {
-   *   await engine.shutdown();
-   *   process.exit(0);
-   * });
    */
   async shutdown(): Promise<void> {
     logger.info('Shutting down N8N MCP Engine...');
@@ -122,49 +151,10 @@ export class N8NMCPEngine {
   
   /**
    * Start the engine (if using standalone mode)
-   * For embedded use, this is not necessary
    */
   async start(): Promise<void> {
     await this.server.start();
   }
 }
 
-/**
- * Example usage in a multi-tenant service:
- * 
- * ```typescript
- * import { N8NMCPEngine } from 'n8n-mcp/engine';
- * import express from 'express';
- * 
- * const app = express();
- * const engine = new N8NMCPEngine();
- * 
- * // Middleware for authentication
- * const authenticate = (req, res, next) => {
- *   // Your auth logic
- *   req.userId = 'user123';
- *   next();
- * };
- * 
- * // MCP endpoint with multi-tenant support
- * app.post('/api/mcp/:userId', authenticate, async (req, res) => {
- *   // Log usage for billing
- *   await logUsage(req.userId, 'mcp-request');
- *   
- *   // Rate limiting
- *   if (await isRateLimited(req.userId)) {
- *     return res.status(429).json({ error: 'Rate limited' });
- *   }
- *   
- *   // Process request
- *   await engine.processRequest(req, res);
- * });
- * 
- * // Health endpoint
- * app.get('/health', async (req, res) => {
- *   const health = await engine.healthCheck();
- *   res.json(health);
- * });
- * ```
- */
 export default N8NMCPEngine;

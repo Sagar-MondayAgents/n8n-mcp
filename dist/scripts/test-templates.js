@@ -41,11 +41,15 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 async function testTemplates() {
     console.log('🧪 Testing template functionality...\n');
+    // Initialize database
     const db = await (0, database_adapter_1.createDatabaseAdapter)('./data/nodes.db');
+    // Apply schema if needed
     const schema = fs.readFileSync(path.join(__dirname, '../../src/database/schema.sql'), 'utf8');
     db.exec(schema);
+    // Create service
     const service = new template_service_1.TemplateService(db);
     try {
+        // Get statistics
         const stats = await service.getTemplateStats();
         console.log('📊 Template Database Stats:');
         console.log(`   Total templates: ${stats.totalTemplates}`);
@@ -59,21 +63,25 @@ async function testTemplates() {
         stats.topUsedNodes.forEach((node, i) => {
             console.log(`   ${i + 1}. ${node.node} (${node.count} templates)`);
         });
+        // Test search
         console.log('\n🔍 Testing search for "webhook":');
         const searchResults = await service.searchTemplates('webhook', 3);
         searchResults.forEach((t) => {
             console.log(`   - ${t.name} (${t.views} views)`);
         });
+        // Test node-based search
         console.log('\n🔍 Testing templates with HTTP Request node:');
         const httpTemplates = await service.listNodeTemplates(['n8n-nodes-base.httpRequest'], 3);
         httpTemplates.forEach((t) => {
             console.log(`   - ${t.name} (${t.nodes.length} nodes)`);
         });
+        // Test task-based search
         console.log('\n🔍 Testing AI automation templates:');
         const aiTemplates = await service.getTemplatesForTask('ai_automation');
         aiTemplates.forEach((t) => {
             console.log(`   - ${t.name} by @${t.author.username}`);
         });
+        // Get a specific template
         if (searchResults.length > 0) {
             const templateId = searchResults[0].id;
             console.log(`\n📄 Getting template ${templateId} details...`);
@@ -89,10 +97,12 @@ async function testTemplates() {
     catch (error) {
         console.error('❌ Error during testing:', error);
     }
+    // Close database
     if ('close' in db && typeof db.close === 'function') {
         db.close();
     }
 }
+// Run if called directly
 if (require.main === module) {
     testTemplates().catch(console.error);
 }

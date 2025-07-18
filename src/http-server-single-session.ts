@@ -80,7 +80,32 @@ export class SingleSessionHTTPServer {
       logger.warn('AUTH_TOKEN should be at least 32 characters for security');
     }
   }
-  
+  /**
+   * Handle incoming MCP request in a stateless, per-request manner as per the example.
+   * A new server and transport instance are created for each request.
+   */
+  public async handlePerRequest(req: express.Request, res: express.Response): Promise<void> {
+    try {
+      logger.info('Handling stateless request: creating new server instance...');
+      // Create a new server instance and transport for each request
+      const server = new N8NDocumentationMCPServer();
+      const transport = new StreamableHTTPServerTransport({
+        // Let the transport generate a unique session ID for each request
+        sessionIdGenerator: undefined,
+      });
+
+      // Connect the server to the transport and process the request
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+      logger.info('Stateless request handled successfully.');
+    } catch (error) {
+      logger.error('Stateless MCP request error:', error);
+      if (!res.headersSent) {
+        // Sending a simple error response as specified in the snippet
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  }
   /**
    * Handle incoming MCP request
    */
@@ -314,7 +339,7 @@ export class SingleSessionHTTPServer {
       }
       
       // Handle request with single session
-      await this.handleRequest(req, res);
+      await this.handlePerRequest(req, res);
     });
     
     // 404 handler

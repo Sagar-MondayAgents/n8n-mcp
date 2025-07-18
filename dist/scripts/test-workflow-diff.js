@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Test script for workflow diff engine
+ * Tests various diff operations and edge cases
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 const workflow_diff_engine_1 = require("../services/workflow-diff-engine");
 const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[test-workflow-diff]' });
+// Sample workflow for testing
 const sampleWorkflow = {
     id: 'test-workflow-123',
     name: 'Test Workflow',
@@ -130,6 +135,7 @@ async function testUpdateNode() {
 }
 async function testAddConnection() {
     console.log('\n=== Testing Add Connection Operation ===');
+    // First add a node to connect to
     const workflowWithExtraNode = JSON.parse(JSON.stringify(sampleWorkflow));
     workflowWithExtraNode.nodes.push({
         id: 'email_1',
@@ -211,7 +217,7 @@ async function testValidationOnly() {
             {
                 type: 'addNode',
                 node: {
-                    name: 'Webhook',
+                    name: 'Webhook', // Duplicate name - should fail validation
                     type: 'n8n-nodes-base.webhook',
                     position: [600, 400]
                 }
@@ -231,6 +237,7 @@ async function testValidationOnly() {
 async function testInvalidOperations() {
     console.log('\n=== Testing Invalid Operations ===');
     const engine = new workflow_diff_engine_1.WorkflowDiffEngine();
+    // Test 1: Invalid node type
     console.log('\n1. Testing invalid node type:');
     let result = await engine.applyDiff(sampleWorkflow, {
         id: 'test-workflow-123',
@@ -238,12 +245,13 @@ async function testInvalidOperations() {
                 type: 'addNode',
                 node: {
                     name: 'Bad Node',
-                    type: 'webhook',
+                    type: 'webhook', // Missing package prefix
                     position: [600, 400]
                 }
             }]
     });
     console.log(`   - Result: ${result.success ? '✅' : '❌'} ${result.errors?.[0]?.message || 'Success'}`);
+    // Test 2: Remove non-existent node
     console.log('\n2. Testing remove non-existent node:');
     result = await engine.applyDiff(sampleWorkflow, {
         id: 'test-workflow-123',
@@ -253,6 +261,7 @@ async function testInvalidOperations() {
             }]
     });
     console.log(`   - Result: ${result.success ? '✅' : '❌'} ${result.errors?.[0]?.message || 'Success'}`);
+    // Test 3: Invalid connection
     console.log('\n3. Testing invalid connection:');
     result = await engine.applyDiff(sampleWorkflow, {
         id: 'test-workflow-123',
@@ -267,6 +276,7 @@ async function testInvalidOperations() {
 async function testNodeReferenceByIdAndName() {
     console.log('\n=== Testing Node Reference by ID and Name ===');
     const engine = new workflow_diff_engine_1.WorkflowDiffEngine();
+    // Test update by ID
     console.log('\n1. Update node by ID:');
     let result = await engine.applyDiff(sampleWorkflow, {
         id: 'test-workflow-123',
@@ -285,6 +295,7 @@ async function testNodeReferenceByIdAndName() {
     else {
         console.log(`   - ❌ Failed: ${result.errors[0].message}`);
     }
+    // Test update by name
     console.log('\n2. Update node by name:');
     result = await engine.applyDiff(sampleWorkflow, {
         id: 'test-workflow-123',
@@ -304,6 +315,7 @@ async function testNodeReferenceByIdAndName() {
         console.log(`   - ❌ Failed: ${result.errors[0].message}`);
     }
 }
+// Run all tests
 async function runTests() {
     try {
         console.log('🧪 Running Workflow Diff Engine Tests...\n');
@@ -322,6 +334,7 @@ async function runTests() {
         process.exit(1);
     }
 }
+// Run tests if this is the main module
 if (require.main === module) {
     runTests();
 }

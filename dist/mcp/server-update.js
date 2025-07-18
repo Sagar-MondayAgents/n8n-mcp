@@ -59,11 +59,14 @@ const n8n_api_1 = require("../config/n8n-api");
 const n8nHandlers = __importStar(require("./handlers-n8n-manager"));
 const handlers_workflow_diff_1 = require("./handlers-workflow-diff");
 class N8NDocumentationMCPServer {
+    server;
+    db = null;
+    repository = null;
+    templateService = null;
+    initialized;
+    cache = new simple_cache_1.SimpleCache();
     constructor() {
-        this.db = null;
-        this.repository = null;
-        this.templateService = null;
-        this.cache = new simple_cache_1.SimpleCache();
+        // Try multiple database paths
         const possiblePaths = [
             path_1.default.join(process.cwd(), 'data', 'nodes.db'),
             path_1.default.join(__dirname, '../../data', 'nodes.db'),
@@ -80,6 +83,7 @@ class N8NDocumentationMCPServer {
             logger_1.logger.error('Database not found in any of the expected locations:', possiblePaths);
             throw new Error('Database nodes.db not found. Please run npm run rebuild first.');
         }
+        // Initialize database asynchronously
         this.initialized = this.initializeDatabase(dbPath);
         logger_1.logger.info('Initializing n8n Documentation MCP server');
         this.server = new index_js_1.Server({
@@ -111,6 +115,7 @@ class N8NDocumentationMCPServer {
         }
     }
     setupHandlers() {
+        // Handle initialization
         this.server.setRequestHandler(types_js_1.InitializeRequestSchema, async () => {
             const response = {
                 protocolVersion: '2024-11-05',
@@ -122,12 +127,15 @@ class N8NDocumentationMCPServer {
                     version: '2.4.1',
                 },
             };
+            // Debug: Log to stderr to see if handler is called
             if (process.env.DEBUG_MCP === 'true') {
                 console.error('Initialize handler called, returning:', JSON.stringify(response));
             }
             return response;
         });
+        // Handle tool listing
         this.server.setRequestHandler(types_js_1.ListToolsRequestSchema, async () => {
+            // Combine documentation tools with management tools if API is configured
             const tools = [...tools_update_1.n8nDocumentationToolsFinal];
             if ((0, n8n_api_1.isN8nApiConfigured)()) {
                 tools.push(...tools_n8n_manager_1.n8nManagementTools);
@@ -138,6 +146,7 @@ class N8NDocumentationMCPServer {
             }
             return { tools };
         });
+        // Handle tool execution
         this.server.setRequestHandler(types_js_1.CallToolRequestSchema, async (request) => {
             const { name, arguments: args } = request.params;
             try {
@@ -213,6 +222,7 @@ class N8NDocumentationMCPServer {
                 return this.validateWorkflowConnections(args.workflow);
             case 'validate_workflow_expressions':
                 return this.validateWorkflowExpressions(args.workflow);
+            // n8n Management Tools (if API is configured)
             case 'n8n_create_workflow':
                 return n8nHandlers.handleCreateWorkflow(args);
             case 'n8n_get_workflow':
@@ -256,8 +266,9 @@ class N8NDocumentationMCPServer {
         await this.ensureInitialized();
         let query = 'SELECT * FROM nodes WHERE 1=1';
         const params = [];
-        console.log('DEBUG list_nodes:', { filters, query, params });
+        console.log('DEBUG list_nodes:', { filters, query, params }); // ADD THIS
         if (filters.package) {
+            // Handle both formats
             const packageVariants = [
                 filters.package,
                 `@n8n/${filters.package}`,
@@ -305,6 +316,7 @@ class N8NDocumentationMCPServer {
             throw new Error('Repository not initialized');
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -322,8 +334,9 @@ class N8NDocumentationMCPServer {
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Add AI tool capabilities information
         const aiToolCapabilities = {
-            canBeUsedAsTool: true,
+            canBeUsedAsTool: true, // Any node can be used as a tool in n8n
             hasUsableAsToolProperty: node.isAITool,
             requiresEnvironmentVariable: !node.isAITool && node.package !== 'n8n-nodes-base',
             toolConnectionType: 'ai_tool',
@@ -341,6 +354,7 @@ class N8NDocumentationMCPServer {
         await this.ensureInitialized();
         if (!this.db)
             throw new Error('Database not initialized');
+        // Handle exact phrase searches with quotes
         if (query.startsWith('"') && query.endsWith('"')) {
             const exactPhrase = query.slice(1, -1);
             const nodes = this.db.prepare(`
@@ -361,10 +375,12 @@ class N8NDocumentationMCPServer {
                 totalCount: nodes.length
             };
         }
+        // Split into words for normal search
         const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
         if (words.length === 0) {
             return { query, results: [], totalCount: 0 };
         }
+        // Build conditions for each word
         const conditions = words.map(() => '(node_type LIKE ? OR display_name LIKE ? OR description LIKE ?)').join(' OR ');
         const params = words.flatMap(w => [`%${w}%`, `%${w}%`, `%${w}%`]);
         params.push(limit);
@@ -401,6 +417,7 @@ class N8NDocumentationMCPServer {
         if (!this.repository)
             throw new Error('Repository not initialized');
         const tools = this.repository.getAITools();
+        // Debug: Check if is_ai_tool column is populated
         const aiCount = this.db.prepare('SELECT COUNT(*) as ai_count FROM nodes WHERE is_ai_tool = 1').get();
         console.log('DEBUG list_ai_tools:', {
             toolsLength: tools.length,
@@ -437,6 +454,7 @@ class N8NDocumentationMCPServer {
         if (!node) {
             throw new Error(`Node ${nodeType} not found`);
         }
+        // If no documentation, generate fallback
         if (!node.documentation) {
             const essentials = await this.getNodeEssentials(nodeType);
             return {
@@ -505,12 +523,15 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Check cache first
         const cacheKey = `essentials:${nodeType}`;
         const cached = this.cache.get(cacheKey);
         if (cached)
             return cached;
+        // Get the full node information
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -528,9 +549,13 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Get properties (already parsed by repository)
         const allProperties = node.properties || [];
+        // Get essential properties
         const essentials = property_filter_1.PropertyFilter.getEssentials(allProperties, node.nodeType);
+        // Generate examples
         const examples = example_generator_1.ExampleGenerator.getExamples(node.nodeType, essentials);
+        // Get operations (already parsed by repository)
         const operations = node.operations || [];
         const result = {
             nodeType: node.nodeType,
@@ -558,6 +583,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 developmentStyle: node.developmentStyle || 'programmatic'
             }
         };
+        // Cache for 1 hour
         this.cache.set(cacheKey, result, 3600);
         return result;
     }
@@ -565,8 +591,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Get the node
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -584,6 +612,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Get properties and search (already parsed by repository)
         const allProperties = node.properties || [];
         const matches = property_filter_1.PropertyFilter.searchProperties(allProperties, query, maxResults);
         return {
@@ -607,6 +636,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
     async getNodeForTask(task) {
         const template = task_templates_1.TaskTemplates.getTaskTemplate(task);
         if (!template) {
+            // Try to find similar tasks
             const similar = task_templates_1.TaskTemplates.searchTasks(task);
             throw new Error(`Unknown task: ${task}. ` +
                 (similar.length > 0
@@ -639,6 +669,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         const parts = path.split('.');
         let value = config;
         for (const part of parts) {
+            // Handle array notation like parameters[0]
             const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
             if (arrayMatch) {
                 value = value?.[arrayMatch[1]]?.[parseInt(arrayMatch[2])];
@@ -668,6 +699,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 })
             };
         }
+        // Return all tasks grouped by category
         const categories = task_templates_1.TaskTemplates.getTaskCategories();
         const result = {
             totalTasks: task_templates_1.TaskTemplates.getAllTasks().length,
@@ -689,8 +721,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Get node info to access properties
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -708,8 +742,11 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Get properties
         const properties = node.properties || [];
+        // Use enhanced validator with operation mode by default
         const validationResult = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode(node.nodeType, config, properties, mode, profile);
+        // Add node context to result
         return {
             nodeType: node.nodeType,
             displayName: node.displayName,
@@ -726,8 +763,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Get node info to access properties
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -745,8 +784,11 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Get properties
         const properties = node.properties || [];
+        // Analyze dependencies
         const analysis = property_dependencies_1.PropertyDependencies.analyze(properties);
+        // If config provided, check visibility impact
         let visibilityImpact = null;
         if (config) {
             visibilityImpact = property_dependencies_1.PropertyDependencies.getVisibilityImpact(properties, config);
@@ -765,8 +807,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Get node info
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -784,9 +828,11 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Determine common AI tool use cases based on node type
         const commonUseCases = this.getCommonAIToolUseCases(node.nodeType);
+        // Build AI tool capabilities info
         const aiToolCapabilities = {
-            canBeUsedAsTool: true,
+            canBeUsedAsTool: true, // In n8n, ANY node can be used as a tool when connected to AI Agent
             hasUsableAsToolProperty: node.isAITool,
             requiresEnvironmentVariable: !node.isAITool && node.package !== 'n8n-nodes-base',
             connectionType: 'ai_tool',
@@ -855,11 +901,13 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 'Integrate with external systems'
             ]
         };
+        // Check for partial matches
         for (const [key, useCases] of Object.entries(useCaseMap)) {
             if (nodeType.includes(key)) {
                 return useCases;
             }
         }
+        // Generic use cases for unknown nodes
         return [
             'Perform automated actions',
             'Integrate with external services',
@@ -901,11 +949,13 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 }
             }
         };
+        // Check for exact match or partial match
         for (const [key, example] of Object.entries(exampleMap)) {
             if (nodeType.includes(key)) {
                 return example;
             }
         }
+        // Generic example
         return {
             toolName: 'Custom Tool',
             toolDescription: 'Performs specific operations. Describe what this tool does and when to use it.',
@@ -918,8 +968,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Get node info
         let node = this.repository.getNode(nodeType);
         if (!node) {
+            // Try alternative formats
             const alternatives = [
                 nodeType,
                 nodeType.replace('n8n-nodes-base.', ''),
@@ -937,19 +989,25 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 throw new Error(`Node ${nodeType} not found`);
             }
         }
+        // Get properties  
         const properties = node.properties || [];
+        // Extract operation context
         const operationContext = {
             resource: config.resource,
             operation: config.operation,
             action: config.action,
             mode: config.mode
         };
+        // Find missing required fields
         const missingFields = [];
         for (const prop of properties) {
+            // Skip if not required
             if (!prop.required)
                 continue;
+            // Skip if not visible based on current config
             if (prop.displayOptions) {
                 let isVisible = true;
+                // Check show conditions
                 if (prop.displayOptions.show) {
                     for (const [key, values] of Object.entries(prop.displayOptions.show)) {
                         const configValue = config[key];
@@ -960,6 +1018,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                         }
                     }
                 }
+                // Check hide conditions
                 if (isVisible && prop.displayOptions.hide) {
                     for (const [key, values] of Object.entries(prop.displayOptions.hide)) {
                         const configValue = config[key];
@@ -973,6 +1032,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                 if (!isVisible)
                     continue;
             }
+            // Check if field is missing
             if (!(prop.name in config)) {
                 missingFields.push(prop.displayName || prop.name);
             }
@@ -1241,10 +1301,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                         warning: "ALWAYS use node NAMES in connections, NEVER use node IDs!",
                         explanation: "Using IDs will make nodes appear disconnected in n8n UI",
                         wrong: {
-                            connections: { "1": { main: [[{ node: "2", type: "main", index: 0 }]] } }
+                            connections: { "1": { main: [[{ node: "2", type: "main", index: 0 }]] } } // ❌ WRONG - uses IDs
                         },
                         correct: {
-                            connections: { "Start": { main: [[{ node: "Set", type: "main", index: 0 }]] } }
+                            connections: { "Start": { main: [[{ node: "Set", type: "main", index: 0 }]] } } // ✅ CORRECT - uses names
                         }
                     },
                     "Create Simple Workflow": {
@@ -1255,7 +1315,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                                 { id: "1", name: "Start", type: "n8n-nodes-base.start", position: [250, 300] },
                                 { id: "2", name: "Set", type: "n8n-nodes-base.set", position: [450, 300] }
                             ],
-                            connections: { "Start": { main: [[{ node: "Set", type: "main", index: 0 }]] } }
+                            connections: { "Start": { main: [[{ node: "Set", type: "main", index: 0 }]] } } // ✅ Uses node names!
                         }
                     },
                     "Execute via Webhook": {
@@ -1292,6 +1352,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         if (topic && guides[topic]) {
             return guides[topic];
         }
+        // Return complete overview
         return {
             title: "n8n MCP Tools Complete Guide",
             quickStart: guides.overview,
@@ -1361,6 +1422,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
             }
         };
     }
+    // Add connect method to accept any transport
     async connect(transport) {
         await this.ensureInitialized();
         await this.server.connect(transport);
@@ -1368,6 +1430,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
             transportType: transport.constructor.name
         });
     }
+    // Template-related methods
     async listNodeTemplates(nodeTypes, limit = 10) {
         await this.ensureInitialized();
         if (!this.templateService)
@@ -1459,9 +1522,11 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Create workflow validator instance
         const validator = new workflow_validator_1.WorkflowValidator(this.repository, enhanced_config_validator_1.EnhancedConfigValidator);
         try {
             const result = await validator.validateWorkflow(workflow, options);
+            // Format the response for better readability
             const response = {
                 valid: result.valid,
                 summary: {
@@ -1507,8 +1572,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Create workflow validator instance
         const validator = new workflow_validator_1.WorkflowValidator(this.repository, enhanced_config_validator_1.EnhancedConfigValidator);
         try {
+            // Validate only connections
             const result = await validator.validateWorkflow(workflow, {
                 validateNodes: false,
                 validateConnections: true,
@@ -1523,6 +1590,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                     invalidConnections: result.statistics.invalidConnections
                 }
             };
+            // Filter to only connection-related issues
             const connectionErrors = result.errors.filter(e => e.message.includes('connection') ||
                 e.message.includes('cycle') ||
                 e.message.includes('orphaned'));
@@ -1555,8 +1623,10 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         await this.ensureInitialized();
         if (!this.repository)
             throw new Error('Repository not initialized');
+        // Create workflow validator instance
         const validator = new workflow_validator_1.WorkflowValidator(this.repository, enhanced_config_validator_1.EnhancedConfigValidator);
         try {
+            // Validate only expressions
             const result = await validator.validateWorkflow(workflow, {
                 validateNodes: false,
                 validateConnections: false,
@@ -1569,6 +1639,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                     expressionsValidated: result.statistics.expressionsValidated
                 }
             };
+            // Filter to only expression-related issues
             const expressionErrors = result.errors.filter(e => e.message.includes('Expression') ||
                 e.message.includes('$') ||
                 e.message.includes('{{'));
@@ -1587,6 +1658,7 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
                     message: w.message
                 }));
             }
+            // Add tips for common expression issues
             if (expressionErrors.length > 0 || expressionWarnings.length > 0) {
                 response.tips = [
                     'Use {{ }} to wrap expressions',
@@ -1606,18 +1678,24 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
         }
     }
     async run() {
+        // Ensure database is initialized before starting server
         await this.ensureInitialized();
         const transport = new stdio_js_1.StdioServerTransport();
         await this.server.connect(transport);
+        // Force flush stdout for Docker environments
+        // Docker uses block buffering which can delay MCP responses
         if (!process.stdout.isTTY || process.env.IS_DOCKER) {
+            // Override write to auto-flush
             const originalWrite = process.stdout.write.bind(process.stdout);
             process.stdout.write = function (chunk, encoding, callback) {
                 const result = originalWrite(chunk, encoding, callback);
+                // Force immediate flush
                 process.stdout.emit('drain');
                 return result;
             };
         }
         logger_1.logger.info('n8n Documentation MCP Server running on stdio transport');
+        // Keep the process alive and listening
         process.stdin.resume();
     }
 }

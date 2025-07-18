@@ -18,13 +18,18 @@ async function testTool(server, toolName, args) {
 }
 async function main() {
     console.log('🤖 Testing MCP Tools\n');
+    // Create server instance and wait for initialization
     const server = new server_1.N8NDocumentationMCPServer();
+    // Give it time to initialize
     await new Promise(resolve => setTimeout(resolve, 100));
+    // Test get_node_as_tool_info
     console.log('\n=== Testing get_node_as_tool_info ===');
     await testTool(server, 'getNodeAsToolInfo', 'nodes-base.slack');
     await testTool(server, 'getNodeAsToolInfo', 'nodes-base.googleSheets');
+    // Test enhanced get_node_info with aiToolCapabilities
     console.log('\n\n=== Testing get_node_info (with aiToolCapabilities) ===');
     await testTool(server, 'getNodeInfo', 'nodes-base.httpRequest');
+    // Test list_ai_tools with enhanced response
     console.log('\n\n=== Testing list_ai_tools (enhanced) ===');
     await testTool(server, 'listAITools', {});
     console.log('\n✅ All tests completed!');

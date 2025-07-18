@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * Copyright (c) 2024 AiAdvisors Romuald Czlonkowski
+ * Licensed under the Sustainable Use License v1.0
+ */
 const database_adapter_1 = require("../database/database-adapter");
 async function validate() {
     const db = await (0, database_adapter_1.createDatabaseAdapter)('./data/nodes.db');
@@ -31,7 +35,7 @@ async function validate() {
         {
             type: 'nodes-langchain.agent',
             checks: {
-                isAITool: false,
+                isAITool: false, // According to the database, it's not marked as AI tool
                 packageName: '@n8n/n8n-nodes-langchain'
             }
         }
@@ -47,6 +51,7 @@ async function validate() {
         }
         let nodeOk = true;
         const issues = [];
+        // Run checks
         if (check.checks.hasDocumentation && !node.documentation) {
             nodeOk = false;
             issues.push('missing documentation');
@@ -89,6 +94,7 @@ async function validate() {
         }
     }
     console.log(`\n📊 Results: ${passed} passed, ${failed} failed`);
+    // Additional statistics
     const stats = db.prepare(`
     SELECT 
       COUNT(*) as total,
@@ -104,6 +110,7 @@ async function validate() {
     console.log(`   Triggers: ${stats.triggers}`);
     console.log(`   Versioned: ${stats.versioned}`);
     console.log(`   Packages: ${stats.packages}`);
+    // Check documentation coverage
     const docStats = db.prepare(`
     SELECT 
       COUNT(*) as total,

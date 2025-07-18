@@ -5,6 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startFixedHTTPServer = startFixedHTTPServer;
+/**
+ * Fixed HTTP server for n8n-MCP that properly handles StreamableHTTPServerTransport initialization
+ * This implementation ensures the transport is properly initialized before handling requests
+ */
 const express_1 = __importDefault(require("express"));
 const tools_update_1 = require("./mcp/tools-update");
 const server_update_1 = require("./mcp/server-update");
@@ -12,6 +16,9 @@ const logger_1 = require("./utils/logger");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 let expressServer;
+/**
+ * Validate required environment variables
+ */
 function validateEnvironment() {
     const required = ['AUTH_TOKEN'];
     const missing = required.filter(key => !process.env[key]);
@@ -26,6 +33,9 @@ function validateEnvironment() {
         console.warn('WARNING: AUTH_TOKEN should be at least 32 characters for security');
     }
 }
+/**
+ * Graceful shutdown handler
+ */
 async function shutdown() {
     logger_1.logger.info('Shutting down HTTP server...');
     console.log('Shutting down HTTP server...');
@@ -47,6 +57,8 @@ async function shutdown() {
 async function startFixedHTTPServer() {
     validateEnvironment();
     const app = (0, express_1.default)();
+    // CRITICAL: Don't use any body parser - StreamableHTTPServerTransport needs raw stream
+    // Security headers
     app.use((req, res, next) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'DENY');
@@ -54,6 +66,7 @@ async function startFixedHTTPServer() {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         next();
     });
+    // CORS configuration
     app.use((req, res, next) => {
         const allowedOrigin = process.env.CORS_ORIGIN || '*';
         res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -66,6 +79,7 @@ async function startFixedHTTPServer() {
         }
         next();
     });
+    // Request logging
     app.use((req, res, next) => {
         logger_1.logger.info(`${req.method} ${req.path}`, {
             ip: req.ip,
@@ -74,8 +88,10 @@ async function startFixedHTTPServer() {
         });
         next();
     });
+    // Create a single persistent MCP server instance
     const mcpServer = new server_update_1.N8NDocumentationMCPServer();
     logger_1.logger.info('Created persistent MCP server instance');
+    // Health check endpoint
     app.get('/health', (req, res) => {
         res.json({
             status: 'ok',
@@ -90,6 +106,7 @@ async function startFixedHTTPServer() {
             timestamp: new Date().toISOString()
         });
     });
+    // Version endpoint
     app.get('/version', (req, res) => {
         res.json({
             version: '2.4.1',
@@ -98,6 +115,7 @@ async function startFixedHTTPServer() {
             commit: process.env.GIT_COMMIT || 'unknown'
         });
     });
+    // Test tools endpoint
     app.get('/test-tools', async (req, res) => {
         try {
             const result = await mcpServer.executeTool('get_node_essentials', { nodeType: 'nodes-base.httpRequest' });
@@ -107,8 +125,10 @@ async function startFixedHTTPServer() {
             res.json({ status: 'error', message: error instanceof Error ? error.message : 'Unknown error' });
         }
     });
+    // Main MCP endpoint - handle each request with custom transport handling
     app.post('/mcp', async (req, res) => {
         const startTime = Date.now();
+        // Simple auth check
         const authHeader = req.headers.authorization;
         const token = authHeader?.startsWith('Bearer ')
             ? authHeader.slice(7)
@@ -129,6 +149,9 @@ async function startFixedHTTPServer() {
             return;
         }
         try {
+            // Instead of using StreamableHTTPServerTransport, we'll handle the request directly
+            // This avoids the initialization issues with the transport
+            // Collect the raw body
             let body = '';
             req.on('data', chunk => {
                 body += chunk.toString();
@@ -137,6 +160,7 @@ async function startFixedHTTPServer() {
                 try {
                     const jsonRpcRequest = JSON.parse(body);
                     logger_1.logger.debug('Received JSON-RPC request:', { method: jsonRpcRequest.method });
+                    // Handle the request based on method
                     let response;
                     switch (jsonRpcRequest.method) {
                         case 'initialize':
@@ -166,6 +190,7 @@ async function startFixedHTTPServer() {
                             };
                             break;
                         case 'tools/call':
+                            // Delegate to the MCP server
                             const toolName = jsonRpcRequest.params?.name;
                             const toolArgs = jsonRpcRequest.params?.arguments || {};
                             try {
@@ -204,6 +229,7 @@ async function startFixedHTTPServer() {
                                 id: jsonRpcRequest.id
                             };
                     }
+                    // Send response
                     res.setHeader('Content-Type', 'application/json');
                     res.json(response);
                     const duration = Date.now() - startTime;
@@ -243,12 +269,14 @@ async function startFixedHTTPServer() {
             }
         }
     });
+    // 404 handler
     app.use((req, res) => {
         res.status(404).json({
             error: 'Not found',
             message: `Cannot ${req.method} ${req.path}`
         });
     });
+    // Error handler
     app.use((err, req, res, next) => {
         logger_1.logger.error('Express error handler:', err);
         if (!res.headersSent) {
@@ -272,6 +300,7 @@ async function startFixedHTTPServer() {
         console.log(`MCP endpoint: http://localhost:${port}/mcp`);
         console.log('\nPress Ctrl+C to stop the server');
     });
+    // Handle errors
     expressServer.on('error', (error) => {
         if (error.code === 'EADDRINUSE') {
             logger_1.logger.error(`Port ${port} is already in use`);
@@ -284,8 +313,10 @@ async function startFixedHTTPServer() {
             process.exit(1);
         }
     });
+    // Graceful shutdown handlers
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
+    // Handle uncaught errors
     process.on('uncaughtException', (error) => {
         logger_1.logger.error('Uncaught exception:', error);
         console.error('Uncaught exception:', error);
@@ -297,6 +328,7 @@ async function startFixedHTTPServer() {
         shutdown();
     });
 }
+// Start if called directly
 if (require.main === module) {
     startFixedHTTPServer().catch(error => {
         logger_1.logger.error('Failed to start Fixed HTTP server:', error);

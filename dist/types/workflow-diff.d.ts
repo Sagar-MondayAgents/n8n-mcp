@@ -1,3 +1,7 @@
+/**
+ * Workflow Diff Types
+ * Defines the structure for partial workflow updates using diff operations
+ */
 import { WorkflowNode } from './n8n-api';
 export interface DiffOperation {
     type: string;

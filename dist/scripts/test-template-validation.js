@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Test workflow validation on actual n8n templates from the database
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,6 +18,7 @@ const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[test-template-validation]' });
 async function testTemplateValidation() {
     logger.info('Starting template validation tests...\n');
+    // Initialize database
     const dbPath = path_1.default.join(process.cwd(), 'data', 'nodes.db');
     if (!(0, fs_1.existsSync)(dbPath)) {
         logger.error('Database not found. Run npm run rebuild first.');
@@ -25,6 +29,7 @@ async function testTemplateValidation() {
     const templateRepository = new template_repository_1.TemplateRepository(db);
     const validator = new workflow_validator_1.WorkflowValidator(repository, enhanced_config_validator_1.EnhancedConfigValidator);
     try {
+        // Get some templates to test
         const templates = await templateRepository.getAllTemplates(20);
         if (templates.length === 0) {
             logger.warn('No templates found in database. Run npm run fetch:templates first.');
@@ -40,6 +45,7 @@ async function testTemplateValidation() {
             errorTypes: new Map(),
             warningTypes: new Map()
         };
+        // Validate each template
         for (const template of templates) {
             logger.info(`\n${'='.repeat(80)}`);
             logger.info(`Validating: ${template.name} (ID: ${template.id})`);
@@ -48,10 +54,13 @@ async function testTemplateValidation() {
             logger.info(`${'='.repeat(80)}\n`);
             try {
                 const workflow = JSON.parse(template.workflow_json);
+                // Log workflow summary
                 logger.info(`Workflow summary:`);
                 logger.info(`- Nodes: ${workflow.nodes?.length || 0}`);
                 logger.info(`- Connections: ${Object.keys(workflow.connections || {}).length}`);
+                // Validate the workflow
                 const validationResult = await validator.validateWorkflow(workflow);
+                // Update statistics
                 if (validationResult.valid) {
                     results.valid++;
                     console.log('✅ VALID');
@@ -100,6 +109,7 @@ async function testTemplateValidation() {
                 results.invalid++;
             }
         }
+        // Print summary
         console.log('\n' + '='.repeat(80));
         console.log('VALIDATION SUMMARY');
         console.log('='.repeat(80));
@@ -135,6 +145,7 @@ async function testTemplateValidation() {
         db.close();
     }
 }
+// Run tests
 testTemplateValidation().catch(error => {
     logger.error('Test failed:', error);
     process.exit(1);

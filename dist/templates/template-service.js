@@ -37,13 +37,20 @@ exports.TemplateService = void 0;
 const template_repository_1 = require("./template-repository");
 const logger_1 = require("../utils/logger");
 class TemplateService {
+    repository;
     constructor(db) {
         this.repository = new template_repository_1.TemplateRepository(db);
     }
+    /**
+     * List templates that use specific node types
+     */
     async listNodeTemplates(nodeTypes, limit = 10) {
         const templates = this.repository.getTemplatesByNodes(nodeTypes, limit);
         return templates.map(this.formatTemplateInfo);
     }
+    /**
+     * Get a specific template with full workflow
+     */
     async getTemplate(templateId) {
         const template = this.repository.getTemplate(templateId);
         if (!template) {
@@ -54,14 +61,23 @@ class TemplateService {
             workflow: JSON.parse(template.workflow_json)
         };
     }
+    /**
+     * Search templates by query
+     */
     async searchTemplates(query, limit = 20) {
         const templates = this.repository.searchTemplates(query, limit);
         return templates.map(this.formatTemplateInfo);
     }
+    /**
+     * Get templates for a specific task
+     */
     async getTemplatesForTask(task) {
         const templates = this.repository.getTemplatesForTask(task);
         return templates.map(this.formatTemplateInfo);
     }
+    /**
+     * List available tasks
+     */
     listAvailableTasks() {
         return [
             'ai_automation',
@@ -76,23 +92,34 @@ class TemplateService {
             'database_operations'
         ];
     }
+    /**
+     * Get template statistics
+     */
     async getTemplateStats() {
         return this.repository.getTemplateStats();
     }
+    /**
+     * Fetch and update templates from n8n.io
+     */
     async fetchAndUpdateTemplates(progressCallback) {
         try {
+            // Dynamically import fetcher only when needed (requires axios)
             const { TemplateFetcher } = await Promise.resolve().then(() => __importStar(require('./template-fetcher')));
             const fetcher = new TemplateFetcher();
+            // Clear existing templates
             this.repository.clearTemplates();
+            // Fetch template list
             logger_1.logger.info('Fetching template list from n8n.io');
             const templates = await fetcher.fetchTemplates((current, total) => {
                 progressCallback?.('Fetching template list', current, total);
             });
             logger_1.logger.info(`Found ${templates.length} templates from last year`);
+            // Fetch details for each template
             logger_1.logger.info('Fetching template details');
             const details = await fetcher.fetchAllTemplateDetails(templates, (current, total) => {
                 progressCallback?.('Fetching template details', current, total);
             });
+            // Save to database
             logger_1.logger.info('Saving templates to database');
             let saved = 0;
             for (const template of templates) {
@@ -110,6 +137,9 @@ class TemplateService {
             throw error;
         }
     }
+    /**
+     * Format stored template for API response
+     */
     formatTemplateInfo(template) {
         return {
             id: template.id,

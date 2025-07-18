@@ -37,12 +37,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.rebuildDocumentationDatabase = rebuildDocumentationDatabase;
 const dotenv = __importStar(require("dotenv"));
 const node_documentation_service_1 = require("../services/node-documentation-service");
+// Load environment variables
 dotenv.config();
+/**
+ * Rebuild the enhanced documentation database
+ */
 async function rebuildDocumentationDatabase() {
     console.log('🔄 Starting enhanced documentation database rebuild...\n');
     const startTime = Date.now();
     const service = new node_documentation_service_1.NodeDocumentationService();
     try {
+        // Run the rebuild
         const results = await service.rebuildDatabase();
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log('\n✅ Enhanced documentation database rebuild completed!\n');
@@ -60,6 +65,7 @@ async function rebuildDocumentationDatabase() {
                 console.log(`   ... and ${results.errors.length - 5} more errors`);
             }
         }
+        // Get and display statistics
         const stats = await service.getStatistics();
         console.log('\n📈 Database Statistics:');
         console.log(`   Total nodes: ${stats.totalNodes}`);
@@ -72,6 +78,7 @@ async function rebuildDocumentationDatabase() {
         stats.packageDistribution.slice(0, 10).forEach((pkg) => {
             console.log(`   ${pkg.package}: ${pkg.count} nodes`);
         });
+        // Close database connection
         await service.close();
         console.log('\n✨ Enhanced documentation database is ready!');
         console.log('💡 The database now includes:');
@@ -86,6 +93,7 @@ async function rebuildDocumentationDatabase() {
         process.exit(1);
     }
 }
+// Run if called directly
 if (require.main === module) {
     rebuildDocumentationDatabase().catch(error => {
         console.error('Fatal error:', error);

@@ -2,14 +2,20 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PropertyExtractor = void 0;
 class PropertyExtractor {
+    /**
+     * Extract properties with proper handling of n8n's complex structures
+     */
     extractProperties(nodeClass) {
         const properties = [];
+        // First try to get instance-level properties
         let instance;
         try {
             instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
         }
         catch (e) {
+            // Failed to instantiate
         }
+        // Handle versioned nodes - check instance for nodeVersions
         if (instance?.nodeVersions) {
             const versions = Object.keys(instance.nodeVersions);
             const latestVersion = Math.max(...versions.map(Number));
@@ -18,6 +24,7 @@ class PropertyExtractor {
                 return this.normalizeProperties(versionedNode.description.properties);
             }
         }
+        // Check for description with properties
         const description = instance?.description || instance?.baseDescription ||
             this.getNodeDescription(nodeClass);
         if (description?.properties) {
@@ -26,13 +33,16 @@ class PropertyExtractor {
         return properties;
     }
     getNodeDescription(nodeClass) {
+        // Try to get description from the class first
         let description;
         if (typeof nodeClass === 'function') {
+            // Try to instantiate to get description
             try {
                 const instance = new nodeClass();
                 description = instance.description || instance.baseDescription || {};
             }
             catch (e) {
+                // Some nodes might require parameters to instantiate
                 description = nodeClass.description || {};
             }
         }
@@ -41,14 +51,20 @@ class PropertyExtractor {
         }
         return description;
     }
+    /**
+     * Extract operations from both declarative and programmatic nodes
+     */
     extractOperations(nodeClass) {
         const operations = [];
+        // First try to get instance-level data
         let instance;
         try {
             instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
         }
         catch (e) {
+            // Failed to instantiate
         }
+        // Handle versioned nodes
         if (instance?.nodeVersions) {
             const versions = Object.keys(instance.nodeVersions);
             const latestVersion = Math.max(...versions.map(Number));
@@ -57,6 +73,7 @@ class PropertyExtractor {
                 return this.extractOperationsFromDescription(versionedNode.description);
             }
         }
+        // Get description
         const description = instance?.description || instance?.baseDescription ||
             this.getNodeDescription(nodeClass);
         return this.extractOperationsFromDescription(description);
@@ -65,8 +82,10 @@ class PropertyExtractor {
         const operations = [];
         if (!description)
             return operations;
+        // Declarative nodes (with routing)
         if (description.routing) {
             const routing = description.routing;
+            // Extract from request.resource and request.operation
             if (routing.request?.resource) {
                 const resources = routing.request.resource.options || [];
                 const operationOptions = routing.request.operation?.options || {};
@@ -83,6 +102,7 @@ class PropertyExtractor {
                 });
             }
         }
+        // Programmatic nodes - look for operation property in properties
         if (description.properties && Array.isArray(description.properties)) {
             const operationProp = description.properties.find((p) => p.name === 'operation' || p.name === 'action');
             if (operationProp?.options) {
@@ -97,30 +117,43 @@ class PropertyExtractor {
         }
         return operations;
     }
+    /**
+     * Deep search for AI tool capability
+     */
     detectAIToolCapability(nodeClass) {
         const description = this.getNodeDescription(nodeClass);
+        // Direct property check
         if (description?.usableAsTool === true)
             return true;
+        // Check in actions for declarative nodes
         if (description?.actions?.some((a) => a.usableAsTool === true))
             return true;
+        // Check versioned nodes
         if (nodeClass.nodeVersions) {
             for (const version of Object.values(nodeClass.nodeVersions)) {
                 if (version.description?.usableAsTool === true)
                     return true;
             }
         }
+        // Check for specific AI-related properties
         const aiIndicators = ['openai', 'anthropic', 'huggingface', 'cohere', 'ai'];
         const nodeName = description?.name?.toLowerCase() || '';
         return aiIndicators.some(indicator => nodeName.includes(indicator));
     }
+    /**
+     * Extract credential requirements with proper structure
+     */
     extractCredentials(nodeClass) {
         const credentials = [];
+        // First try to get instance-level data
         let instance;
         try {
             instance = typeof nodeClass === 'function' ? new nodeClass() : nodeClass;
         }
         catch (e) {
+            // Failed to instantiate
         }
+        // Handle versioned nodes
         if (instance?.nodeVersions) {
             const versions = Object.keys(instance.nodeVersions);
             const latestVersion = Math.max(...versions.map(Number));
@@ -129,6 +162,7 @@ class PropertyExtractor {
                 return versionedNode.description.credentials;
             }
         }
+        // Check for description with credentials
         const description = instance?.description || instance?.baseDescription ||
             this.getNodeDescription(nodeClass);
         if (description?.credentials) {
@@ -137,6 +171,7 @@ class PropertyExtractor {
         return credentials;
     }
     normalizeProperties(properties) {
+        // Ensure all properties have consistent structure
         return properties.map(prop => ({
             displayName: prop.displayName,
             name: prop.name,

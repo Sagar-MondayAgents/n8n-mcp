@@ -40,18 +40,22 @@ const node_source_extractor_1 = require("../utils/node-source-extractor");
 const logger_1 = require("../utils/logger");
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
+// Load environment variables
 dotenv.config();
 async function extractNodesFromDocker() {
     logger_1.logger.info('🐳 Starting Docker-based node extraction...');
+    // Add Docker volume paths to environment for NodeSourceExtractor
     const dockerVolumePaths = [
         process.env.N8N_MODULES_PATH || '/n8n-modules',
         process.env.N8N_CUSTOM_PATH || '/n8n-custom',
     ];
     logger_1.logger.info(`Docker volume paths: ${dockerVolumePaths.join(', ')}`);
+    // Check if volumes are mounted
     for (const volumePath of dockerVolumePaths) {
         try {
             await fs.access(volumePath);
             logger_1.logger.info(`✅ Volume mounted: ${volumePath}`);
+            // List what's in the volume
             const entries = await fs.readdir(volumePath);
             logger_1.logger.info(`Contents of ${volumePath}: ${entries.slice(0, 10).join(', ')}${entries.length > 10 ? '...' : ''}`);
         }
@@ -59,13 +63,17 @@ async function extractNodesFromDocker() {
             logger_1.logger.warn(`❌ Volume not accessible: ${volumePath}`);
         }
     }
+    // Initialize services
     const docService = new node_documentation_service_1.NodeDocumentationService();
     const extractor = new node_source_extractor_1.NodeSourceExtractor();
+    // Extend the extractor's search paths with Docker volumes
     extractor.n8nBasePaths.unshift(...dockerVolumePaths);
+    // Clear existing nodes to ensure we only have latest versions
     logger_1.logger.info('🧹 Clearing existing nodes...');
     const db = docService.db;
     db.prepare('DELETE FROM nodes').run();
     logger_1.logger.info('🔍 Searching for n8n nodes in Docker volumes...');
+    // Known n8n packages to extract
     const n8nPackages = [
         'n8n-nodes-base',
         '@n8n/n8n-nodes-langchain',
@@ -76,6 +84,7 @@ async function extractNodesFromDocker() {
     for (const packageName of n8nPackages) {
         logger_1.logger.info(`\n📦 Processing package: ${packageName}`);
         try {
+            // Find package in Docker volumes
             let packagePath = null;
             for (const volumePath of dockerVolumePaths) {
                 const possiblePaths = [
@@ -84,6 +93,7 @@ async function extractNodesFromDocker() {
                 ];
                 for (const testPath of possiblePaths) {
                     try {
+                        // Use glob pattern to find pnpm packages
                         if (testPath.includes('*')) {
                             const baseDir = path.dirname(testPath.split('*')[0]);
                             const entries = await fs.readdir(baseDir);
@@ -115,16 +125,19 @@ async function extractNodesFromDocker() {
                 continue;
             }
             logger_1.logger.info(`Found package at: ${packagePath}`);
+            // Check package version
             try {
                 const packageJsonPath = path.join(packagePath, 'package.json');
                 const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
                 logger_1.logger.info(`Package version: ${packageJson.version}`);
             }
             catch { }
+            // Find nodes directory
             const nodesPath = path.join(packagePath, 'dist', 'nodes');
             try {
                 await fs.access(nodesPath);
                 logger_1.logger.info(`Scanning nodes directory: ${nodesPath}`);
+                // Extract all nodes from this package
                 const nodeEntries = await scanForNodes(nodesPath);
                 logger_1.logger.info(`Found ${nodeEntries.length} nodes in ${packageName}`);
                 for (const nodeEntry of nodeEntries) {
@@ -132,14 +145,18 @@ async function extractNodesFromDocker() {
                         const nodeName = nodeEntry.name.replace('.node.js', '');
                         const nodeType = `${packageName}.${nodeName}`;
                         logger_1.logger.info(`Extracting: ${nodeType}`);
+                        // Extract source info
                         const sourceInfo = await extractor.extractNodeSource(nodeType);
+                        // Check if this is the If node
                         if (nodeName === 'If') {
+                            // Look for version in the source code
                             const versionMatch = sourceInfo.sourceCode.match(/version:\s*(\d+)/);
                             if (versionMatch) {
                                 ifNodeVersion = versionMatch[1];
                                 logger_1.logger.info(`📍 Found If node version: ${ifNodeVersion}`);
                             }
                         }
+                        // Store in database
                         await docService.storeNode({
                             nodeType: nodeType,
                             name: nodeName,
@@ -179,6 +196,7 @@ async function extractNodesFromDocker() {
             logger_1.logger.warn(`⚠️ If node version is ${ifNodeVersion}, expected v2 or higher`);
         }
     }
+    // Close database
     await docService.close();
 }
 async function scanForNodes(dirPath) {
@@ -203,6 +221,7 @@ async function scanForNodes(dirPath) {
     await scan(dirPath);
     return nodes;
 }
+// Run extraction
 extractNodesFromDocker().catch(error => {
     logger_1.logger.error('Extraction failed:', error);
     process.exit(1);

@@ -8,6 +8,7 @@ async function sanitizeTemplates() {
     const db = await (0, database_adapter_1.createDatabaseAdapter)('./data/nodes.db');
     const sanitizer = new template_sanitizer_1.TemplateSanitizer();
     try {
+        // Get all templates
         const templates = db.prepare('SELECT id, name, workflow_json FROM templates').all();
         console.log(`Found ${templates.length} templates to check\n`);
         let sanitizedCount = 0;
@@ -16,7 +17,9 @@ async function sanitizeTemplates() {
             const originalWorkflow = JSON.parse(template.workflow_json);
             const { sanitized: sanitizedWorkflow, wasModified } = sanitizer.sanitizeWorkflow(originalWorkflow);
             if (wasModified) {
+                // Get detected tokens for reporting
                 const detectedTokens = sanitizer.detectTokens(originalWorkflow);
+                // Update the template with sanitized version
                 const stmt = db.prepare('UPDATE templates SET workflow_json = ? WHERE id = ?');
                 stmt.run(JSON.stringify(sanitizedWorkflow), template.id);
                 sanitizedCount++;
@@ -50,6 +53,7 @@ async function sanitizeTemplates() {
         db.close();
     }
 }
+// Run if called directly
 if (require.main === module) {
     sanitizeTemplates().catch(console.error);
 }

@@ -9,12 +9,15 @@ var LogLevel;
     LogLevel[LogLevel["DEBUG"] = 3] = "DEBUG";
 })(LogLevel || (exports.LogLevel = LogLevel = {}));
 class Logger {
+    config;
+    static instance;
+    useFileLogging = false;
+    fileStream = null;
+    // Cache environment variables for performance
+    isStdio = process.env.MCP_MODE === 'stdio';
+    isDisabled = process.env.DISABLE_CONSOLE_OUTPUT === 'true';
+    isHttp = process.env.MCP_MODE === 'http';
     constructor(config) {
-        this.useFileLogging = false;
-        this.fileStream = null;
-        this.isStdio = process.env.MCP_MODE === 'stdio';
-        this.isDisabled = process.env.DISABLE_CONSOLE_OUTPUT === 'true';
-        this.isHttp = process.env.MCP_MODE === 'http';
         this.config = {
             level: LogLevel.INFO,
             prefix: 'n8n-mcp',
@@ -41,12 +44,18 @@ class Logger {
         return parts.join(' ');
     }
     log(level, levelName, message, ...args) {
+        // Check environment variables FIRST, before level check
+        // In stdio mode, suppress ALL console output to avoid corrupting JSON-RPC
         if (this.isStdio || this.isDisabled) {
+            // Silently drop all logs in stdio mode
             return;
         }
         if (level <= this.config.level) {
             const formattedMessage = this.formatMessage(levelName, message);
+            // In HTTP mode during request handling, suppress console output
+            // The ConsoleManager will handle this, but we add a safety check
             if (this.isHttp && process.env.MCP_REQUEST_ACTIVE === 'true') {
+                // Silently drop the log during active MCP requests
                 return;
             }
             switch (level) {
@@ -91,6 +100,7 @@ class Logger {
     }
 }
 exports.Logger = Logger;
+// Create a default logger instance
 exports.logger = Logger.getInstance({
     level: Logger.parseLogLevel(process.env.LOG_LEVEL || 'info'),
 });

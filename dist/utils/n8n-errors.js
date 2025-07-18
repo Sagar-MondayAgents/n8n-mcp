@@ -5,7 +5,11 @@ exports.handleN8nApiError = handleN8nApiError;
 exports.getUserFriendlyErrorMessage = getUserFriendlyErrorMessage;
 exports.logN8nError = logN8nError;
 const logger_1 = require("./logger");
+// Custom error classes for n8n API operations
 class N8nApiError extends Error {
+    statusCode;
+    code;
+    details;
     constructor(message, statusCode, code, details) {
         super(message);
         this.statusCode = statusCode;
@@ -54,11 +58,13 @@ class N8nServerError extends N8nApiError {
     }
 }
 exports.N8nServerError = N8nServerError;
+// Error handling utility
 function handleN8nApiError(error) {
     if (error instanceof N8nApiError) {
         return error;
     }
     if (error instanceof Error) {
+        // Check if it's an Axios error
         const axiosError = error;
         if (axiosError.response) {
             const { status, data } = axiosError.response;
@@ -81,14 +87,18 @@ function handleN8nApiError(error) {
             }
         }
         else if (axiosError.request) {
+            // Request was made but no response received
             return new N8nApiError('No response from n8n server', undefined, 'NO_RESPONSE');
         }
         else {
+            // Something happened in setting up the request
             return new N8nApiError(axiosError.message, undefined, 'REQUEST_ERROR');
         }
     }
+    // Unknown error type
     return new N8nApiError('Unknown error occurred', undefined, 'UNKNOWN_ERROR', error);
 }
+// Utility to extract user-friendly error messages
 function getUserFriendlyErrorMessage(error) {
     switch (error.code) {
         case 'AUTHENTICATION_ERROR':
@@ -107,6 +117,7 @@ function getUserFriendlyErrorMessage(error) {
             return error.message || 'An unexpected error occurred';
     }
 }
+// Log error with appropriate level
 function logN8nError(error, context) {
     const errorInfo = {
         name: error.name,

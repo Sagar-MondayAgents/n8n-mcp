@@ -1,9 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SimpleCache = void 0;
+/**
+ * Simple in-memory cache with TTL support
+ * No external dependencies needed
+ */
 class SimpleCache {
+    cache = new Map();
     constructor() {
-        this.cache = new Map();
+        // Clean up expired entries every minute
         setInterval(() => {
             const now = Date.now();
             for (const [key, item] of this.cache.entries()) {

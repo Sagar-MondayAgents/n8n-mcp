@@ -1,5 +1,11 @@
 #!/usr/bin/env ts-node
 "use strict";
+/**
+ * Test script for the n8n_validate_workflow tool
+ *
+ * This script tests the new tool that fetches a workflow from n8n
+ * and validates it using the existing validation logic.
+ */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -40,10 +46,12 @@ const node_repository_1 = require("../database/node-repository");
 const database_adapter_1 = require("../database/database-adapter");
 const logger_1 = require("../utils/logger");
 const path = __importStar(require("path"));
+// Load environment variables
 (0, dotenv_1.config)();
 const logger = new logger_1.Logger({ prefix: '[TestN8nValidateWorkflow]' });
 async function testN8nValidateWorkflow() {
     try {
+        // Check if n8n API is configured
         if (!process.env.N8N_API_URL || !process.env.N8N_API_KEY) {
             logger.error('N8N_API_URL and N8N_API_KEY must be set in environment variables');
             process.exit(1);
@@ -52,14 +60,16 @@ async function testN8nValidateWorkflow() {
             url: process.env.N8N_API_URL,
             hasApiKey: !!process.env.N8N_API_KEY
         });
+        // Initialize database
         const dbPath = path.join(process.cwd(), 'data', 'nodes.db');
         const db = await (0, database_adapter_1.createDatabaseAdapter)(dbPath);
         const repository = new node_repository_1.NodeRepository(db);
+        // Test cases
         const testCases = [
             {
                 name: 'Validate existing workflow with all options',
                 args: {
-                    id: '1',
+                    id: '1', // Replace with an actual workflow ID from your n8n instance
                     options: {
                         validateNodes: true,
                         validateConnections: true,
@@ -71,7 +81,7 @@ async function testN8nValidateWorkflow() {
             {
                 name: 'Validate with minimal profile',
                 args: {
-                    id: '1',
+                    id: '1', // Replace with an actual workflow ID
                     options: {
                         profile: 'minimal'
                     }
@@ -80,7 +90,7 @@ async function testN8nValidateWorkflow() {
             {
                 name: 'Validate connections only',
                 args: {
-                    id: '1',
+                    id: '1', // Replace with an actual workflow ID
                     options: {
                         validateNodes: false,
                         validateConnections: true,
@@ -89,6 +99,7 @@ async function testN8nValidateWorkflow() {
                 }
             }
         ];
+        // Run test cases
         for (const testCase of testCases) {
             logger.info(`\nRunning test: ${testCase.name}`);
             logger.info('Input:', JSON.stringify(testCase.args, null, 2));
@@ -118,6 +129,7 @@ async function testN8nValidateWorkflow() {
         process.exit(1);
     }
 }
+// Run the test
 testN8nValidateWorkflow().catch(error => {
     logger.error('Unhandled error:', error);
     process.exit(1);

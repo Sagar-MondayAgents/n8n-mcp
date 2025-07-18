@@ -9,11 +9,15 @@ const path_1 = __importDefault(require("path"));
 const logger_1 = require("./logger");
 const child_process_1 = require("child_process");
 class EnhancedDocumentationFetcher {
+    docsPath;
+    docsRepoUrl = 'https://github.com/n8n-io/n8n-docs.git';
+    cloned = false;
     constructor(docsPath) {
-        this.docsRepoUrl = 'https://github.com/n8n-io/n8n-docs.git';
-        this.cloned = false;
         this.docsPath = docsPath || path_1.default.join(__dirname, '../../temp', 'n8n-docs');
     }
+    /**
+     * Clone or update the n8n-docs repository
+     */
     async ensureDocsRepository() {
         try {
             const exists = await fs_1.promises.access(this.docsPath).then(() => true).catch(() => false);
@@ -40,12 +44,16 @@ class EnhancedDocumentationFetcher {
             throw error;
         }
     }
+    /**
+     * Get enhanced documentation for a specific node
+     */
     async getEnhancedNodeDocumentation(nodeType) {
         if (!this.cloned) {
             await this.ensureDocsRepository();
         }
         try {
             const nodeName = this.extractNodeName(nodeType);
+            // Common documentation paths to check
             const possiblePaths = [
                 path_1.default.join(this.docsPath, 'docs', 'integrations', 'builtin', 'app-nodes', `${nodeType}.md`),
                 path_1.default.join(this.docsPath, 'docs', 'integrations', 'builtin', 'core-nodes', `${nodeType}.md`),
@@ -58,6 +66,7 @@ class EnhancedDocumentationFetcher {
                 try {
                     const content = await fs_1.promises.readFile(docPath, 'utf-8');
                     logger_1.logger.debug(`Checking doc path: ${docPath}`);
+                    // Skip credential documentation files
                     if (this.isCredentialDoc(docPath, content)) {
                         logger_1.logger.debug(`Skipping credential doc: ${docPath}`);
                         continue;
@@ -66,9 +75,11 @@ class EnhancedDocumentationFetcher {
                     return this.parseEnhancedDocumentation(content, docPath);
                 }
                 catch (error) {
+                    // File doesn't exist, continue
                     continue;
                 }
             }
+            // If no exact match, try to find by searching
             logger_1.logger.debug(`No exact match found, searching for ${nodeType}...`);
             const foundPath = await this.searchForNodeDoc(nodeType);
             if (foundPath) {
@@ -86,31 +97,45 @@ class EnhancedDocumentationFetcher {
             return null;
         }
     }
+    /**
+     * Parse markdown content into enhanced documentation structure
+     */
     parseEnhancedDocumentation(markdown, filePath) {
         const doc = {
             markdown,
             url: this.generateDocUrl(filePath),
         };
+        // Extract frontmatter metadata
         const metadata = this.extractFrontmatter(markdown);
         if (metadata) {
             doc.metadata = metadata;
             doc.title = metadata.title;
             doc.description = metadata.description;
         }
+        // Extract title and description from content if not in frontmatter
         if (!doc.title) {
             doc.title = this.extractTitle(markdown);
         }
         if (!doc.description) {
             doc.description = this.extractDescription(markdown);
         }
+        // Extract operations
         doc.operations = this.extractOperations(markdown);
+        // Extract API method mappings
         doc.apiMethods = this.extractApiMethods(markdown);
+        // Extract code examples
         doc.examples = this.extractCodeExamples(markdown);
+        // Extract templates
         doc.templates = this.extractTemplates(markdown);
+        // Extract related resources
         doc.relatedResources = this.extractRelatedResources(markdown);
+        // Extract required scopes
         doc.requiredScopes = this.extractRequiredScopes(markdown);
         return doc;
     }
+    /**
+     * Extract frontmatter metadata
+     */
     extractFrontmatter(markdown) {
         const frontmatterMatch = markdown.match(/^---\n([\s\S]*?)\n---/);
         if (!frontmatterMatch)
@@ -121,6 +146,7 @@ class EnhancedDocumentationFetcher {
             if (line.includes(':')) {
                 const [key, ...valueParts] = line.split(':');
                 const value = valueParts.join(':').trim();
+                // Parse arrays
                 if (value.startsWith('[') && value.endsWith(']')) {
                     frontmatter[key.trim()] = value
                         .slice(1, -1)
@@ -134,12 +160,20 @@ class EnhancedDocumentationFetcher {
         }
         return frontmatter;
     }
+    /**
+     * Extract title from markdown
+     */
     extractTitle(markdown) {
         const match = markdown.match(/^#\s+(.+)$/m);
         return match ? match[1].trim() : undefined;
     }
+    /**
+     * Extract description from markdown
+     */
     extractDescription(markdown) {
+        // Remove frontmatter
         const content = markdown.replace(/^---[\s\S]*?---\n/, '');
+        // Find first paragraph after title
         const lines = content.split('\n');
         let foundTitle = false;
         let description = '';
@@ -155,18 +189,25 @@ class EnhancedDocumentationFetcher {
         }
         return description || undefined;
     }
+    /**
+     * Extract operations from markdown
+     */
     extractOperations(markdown) {
         const operations = [];
+        // Find operations section
         const operationsMatch = markdown.match(/##\s+Operations\s*\n([\s\S]*?)(?=\n##|\n#|$)/i);
         if (!operationsMatch)
             return operations;
         const operationsText = operationsMatch[1];
+        // Parse operation structure - handle nested bullet points
         let currentResource = null;
         const lines = operationsText.split('\n');
         for (const line of lines) {
             const trimmedLine = line.trim();
+            // Skip empty lines
             if (!trimmedLine)
                 continue;
+            // Resource level - non-indented bullet with bold text (e.g., "* **Channel**")
             if (line.match(/^\*\s+\*\*[^*]+\*\*\s*$/) && !line.match(/^\s+/)) {
                 const match = trimmedLine.match(/^\*\s+\*\*([^*]+)\*\*/);
                 if (match) {
@@ -174,13 +215,17 @@ class EnhancedDocumentationFetcher {
                 }
                 continue;
             }
+            // Skip if we don't have a current resource
             if (!currentResource)
                 continue;
+            // Operation level - indented bullets (any whitespace + *)
             if (line.match(/^\s+\*\s+/) && currentResource) {
+                // Extract operation name and description
                 const operationMatch = trimmedLine.match(/^\*\s+\*\*([^*]+)\*\*(.*)$/);
                 if (operationMatch) {
                     const operation = operationMatch[1].trim();
                     let description = operationMatch[2].trim();
+                    // Clean up description
                     description = description.replace(/^:\s*/, '').replace(/\.$/, '').trim();
                     operations.push({
                         resource: currentResource,
@@ -189,9 +234,11 @@ class EnhancedDocumentationFetcher {
                     });
                 }
                 else {
+                    // Handle operations without bold formatting or with different format
                     const simpleMatch = trimmedLine.match(/^\*\s+(.+)$/);
                     if (simpleMatch) {
                         const text = simpleMatch[1].trim();
+                        // Split by colon to separate operation from description
                         const colonIndex = text.indexOf(':');
                         if (colonIndex > 0) {
                             operations.push({
@@ -213,20 +260,26 @@ class EnhancedDocumentationFetcher {
         }
         return operations;
     }
+    /**
+     * Extract API method mappings from markdown tables
+     */
     extractApiMethods(markdown) {
         const apiMethods = [];
+        // Find API method tables
         const tableRegex = /\|.*Resource.*\|.*Operation.*\|.*(?:Slack API method|API method|Method).*\|[\s\S]*?\n(?=\n[^|]|$)/gi;
         const tables = markdown.match(tableRegex);
         if (!tables)
             return apiMethods;
         for (const table of tables) {
             const rows = table.split('\n').filter(row => row.trim() && !row.includes('---'));
+            // Skip header row
             for (let i = 1; i < rows.length; i++) {
                 const cells = rows[i].split('|').map(cell => cell.trim()).filter(Boolean);
                 if (cells.length >= 3) {
                     const resource = cells[0];
                     const operation = cells[1];
                     const apiMethodCell = cells[2];
+                    // Extract API method and URL from markdown link
                     const linkMatch = apiMethodCell.match(/\[([^\]]+)\]\(([^)]+)\)/);
                     if (linkMatch) {
                         apiMethods.push({
@@ -249,13 +302,18 @@ class EnhancedDocumentationFetcher {
         }
         return apiMethods;
     }
+    /**
+     * Extract code examples from markdown
+     */
     extractCodeExamples(markdown) {
         const examples = [];
+        // Extract all code blocks with language
         const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
         let match;
         while ((match = codeBlockRegex.exec(markdown)) !== null) {
             const language = match[1] || 'text';
             const code = match[2].trim();
+            // Look for title or description before the code block
             const beforeCodeIndex = match.index;
             const beforeText = markdown.substring(Math.max(0, beforeCodeIndex - 200), beforeCodeIndex);
             const titleMatch = beforeText.match(/(?:###|####)\s+(.+)$/m);
@@ -267,12 +325,14 @@ class EnhancedDocumentationFetcher {
             if (titleMatch) {
                 example.title = titleMatch[1].trim();
             }
+            // Try to parse JSON examples
             if (language === 'json') {
                 try {
                     JSON.parse(code);
                     examples.push(example);
                 }
                 catch (e) {
+                    // Skip invalid JSON
                 }
             }
             else {
@@ -281,8 +341,12 @@ class EnhancedDocumentationFetcher {
         }
         return examples;
     }
+    /**
+     * Extract template information
+     */
     extractTemplates(markdown) {
         const templates = [];
+        // Look for template widget
         const templateWidgetMatch = markdown.match(/\[\[\s*templatesWidget\s*\(\s*[^,]+,\s*'([^']+)'\s*\)\s*\]\]/);
         if (templateWidgetMatch) {
             templates.push({
@@ -292,17 +356,23 @@ class EnhancedDocumentationFetcher {
         }
         return templates;
     }
+    /**
+     * Extract related resources
+     */
     extractRelatedResources(markdown) {
         const resources = [];
+        // Find related resources section
         const relatedMatch = markdown.match(/##\s+(?:Related resources|Related|Resources)\s*\n([\s\S]*?)(?=\n##|\n#|$)/i);
         if (!relatedMatch)
             return resources;
         const relatedText = relatedMatch[1];
+        // Extract links
         const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
         let match;
         while ((match = linkRegex.exec(relatedText)) !== null) {
             const title = match[1];
             const url = match[2];
+            // Determine resource type
             let type = 'external';
             if (url.includes('docs.n8n.io') || url.startsWith('/')) {
                 type = 'documentation';
@@ -314,12 +384,17 @@ class EnhancedDocumentationFetcher {
         }
         return resources;
     }
+    /**
+     * Extract required scopes
+     */
     extractRequiredScopes(markdown) {
         const scopes = [];
+        // Find required scopes section
         const scopesMatch = markdown.match(/##\s+(?:Required scopes|Scopes)\s*\n([\s\S]*?)(?=\n##|\n#|$)/i);
         if (!scopesMatch)
             return scopes;
         const scopesText = scopesMatch[1];
+        // Extract scope patterns (common formats)
         const scopeRegex = /`([a-z:._-]+)`/gi;
         let match;
         while ((match = scopeRegex.exec(scopesText)) !== null) {
@@ -328,8 +403,11 @@ class EnhancedDocumentationFetcher {
                 scopes.push(scope);
             }
         }
-        return [...new Set(scopes)];
+        return [...new Set(scopes)]; // Remove duplicates
     }
+    /**
+     * Map language to code example type
+     */
     mapLanguageToType(language) {
         switch (language.toLowerCase()) {
             case 'json':
@@ -346,26 +424,38 @@ class EnhancedDocumentationFetcher {
                 return 'text';
         }
     }
+    /**
+     * Check if this is a credential documentation
+     */
     isCredentialDoc(filePath, content) {
         return filePath.includes('/credentials/') ||
             (content.includes('title: ') &&
                 content.includes(' credentials') &&
                 !content.includes(' node documentation'));
     }
+    /**
+     * Extract node name from node type
+     */
     extractNodeName(nodeType) {
         const parts = nodeType.split('.');
         const name = parts[parts.length - 1];
         return name.toLowerCase();
     }
+    /**
+     * Search for node documentation file
+     */
     async searchForNodeDoc(nodeType) {
         try {
+            // First try exact match with nodeType
             let result = (0, child_process_1.execSync)(`find ${this.docsPath}/docs/integrations/builtin -name "${nodeType}.md" -type f | grep -v credentials | head -1`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
             if (result)
                 return result;
+            // Try lowercase nodeType
             const lowerNodeType = nodeType.toLowerCase();
             result = (0, child_process_1.execSync)(`find ${this.docsPath}/docs/integrations/builtin -name "${lowerNodeType}.md" -type f | grep -v credentials | head -1`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
             if (result)
                 return result;
+            // Try node name pattern but exclude trigger nodes
             const nodeName = this.extractNodeName(nodeType);
             result = (0, child_process_1.execSync)(`find ${this.docsPath}/docs/integrations/builtin -name "*${nodeName}.md" -type f | grep -v credentials | grep -v trigger | head -1`, { encoding: 'utf-8', stdio: 'pipe' }).trim();
             return result || null;
@@ -374,6 +464,9 @@ class EnhancedDocumentationFetcher {
             return null;
         }
     }
+    /**
+     * Generate documentation URL from file path
+     */
     generateDocUrl(filePath) {
         const relativePath = path_1.default.relative(this.docsPath, filePath);
         const urlPath = relativePath
@@ -382,6 +475,9 @@ class EnhancedDocumentationFetcher {
             .replace(/\\/g, '/');
         return `https://docs.n8n.io/${urlPath}`;
     }
+    /**
+     * Clean up cloned repository
+     */
     async cleanup() {
         try {
             await fs_1.promises.rm(this.docsPath, { recursive: true, force: true });

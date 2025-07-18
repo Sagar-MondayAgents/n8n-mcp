@@ -1,19 +1,26 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Integration test for n8n_update_partial_workflow MCP tool
+ * Tests that the tool can be called successfully via MCP protocol
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = require("dotenv");
 const logger_1 = require("../utils/logger");
 const n8n_api_1 = require("../config/n8n-api");
 const handlers_workflow_diff_1 = require("../mcp/handlers-workflow-diff");
+// Load environment variables
 (0, dotenv_1.config)();
 async function testMcpUpdatePartialWorkflow() {
     logger_1.logger.info('Testing n8n_update_partial_workflow MCP tool...');
+    // Check if API is configured
     if (!(0, n8n_api_1.isN8nApiConfigured)()) {
         logger_1.logger.warn('n8n API not configured. Set N8N_API_URL and N8N_API_KEY to test.');
         logger_1.logger.info('Example:');
         logger_1.logger.info('  N8N_API_URL=https://your-n8n.com N8N_API_KEY=your-key npm run test:mcp:update-partial');
         return;
     }
+    // Test 1: Validate only - should work without actual workflow
     logger_1.logger.info('\n=== Test 1: Validate Only (no actual workflow needed) ===');
     const validateOnlyRequest = {
         id: 'test-workflow-123',
@@ -46,11 +53,14 @@ async function testMcpUpdatePartialWorkflow() {
     catch (error) {
         logger_1.logger.error('Validation test failed:', error);
     }
+    // Test 2: Test with missing required fields
     logger_1.logger.info('\n=== Test 2: Missing Required Fields ===');
     const invalidRequest = {
         operations: [{
                 type: 'addNode'
+                // Missing node property
             }]
+        // Missing id
     };
     try {
         const result = await (0, handlers_workflow_diff_1.handleUpdatePartialWorkflow)(invalidRequest);
@@ -59,6 +69,7 @@ async function testMcpUpdatePartialWorkflow() {
     catch (error) {
         logger_1.logger.info('Expected validation error:', error instanceof Error ? error.message : String(error));
     }
+    // Test 3: Test with complex operations array
     logger_1.logger.info('\n=== Test 3: Complex Operations Array ===');
     const complexRequest = {
         id: 'workflow-456',
@@ -111,6 +122,7 @@ async function testMcpUpdatePartialWorkflow() {
     catch (error) {
         logger_1.logger.error('Complex operations test failed:', error);
     }
+    // Test 4: Test operation type validation
     logger_1.logger.info('\n=== Test 4: Invalid Operation Type ===');
     const invalidTypeRequest = {
         id: 'workflow-789',
@@ -131,6 +143,7 @@ async function testMcpUpdatePartialWorkflow() {
     logger_1.logger.info('\nNOTE: These tests verify the MCP tool can be called without errors.');
     logger_1.logger.info('To test with real workflows, ensure N8N_API_URL and N8N_API_KEY are set.');
 }
+// Run tests
 testMcpUpdatePartialWorkflow().catch(error => {
     logger_1.logger.error('Unhandled error:', error);
     process.exit(1);

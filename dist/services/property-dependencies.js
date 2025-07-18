@@ -1,15 +1,26 @@
 "use strict";
+/**
+ * Property Dependencies Service
+ *
+ * Analyzes property dependencies and visibility conditions.
+ * Helps AI agents understand which properties affect others.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PropertyDependencies = void 0;
 class PropertyDependencies {
+    /**
+     * Analyze property dependencies for a node
+     */
     static analyze(properties) {
         const dependencies = [];
         const dependencyGraph = {};
         const suggestions = [];
+        // First pass: Find all properties with display conditions
         for (const prop of properties) {
             if (prop.displayOptions?.show || prop.displayOptions?.hide) {
                 const dependency = this.extractDependency(prop, properties);
                 dependencies.push(dependency);
+                // Build dependency graph
                 for (const condition of dependency.dependsOn) {
                     if (!dependencyGraph[condition.property]) {
                         dependencyGraph[condition.property] = [];
@@ -18,9 +29,11 @@ class PropertyDependencies {
                 }
             }
         }
+        // Second pass: Find which properties enable/disable others
         for (const dep of dependencies) {
             dep.enablesProperties = dependencyGraph[dep.property] || [];
         }
+        // Generate suggestions
         this.generateSuggestions(dependencies, suggestions);
         return {
             totalProperties: properties.length,
@@ -30,6 +43,9 @@ class PropertyDependencies {
             suggestions
         };
     }
+    /**
+     * Extract dependency information from a property
+     */
     static extractDependency(prop, allProperties) {
         const dependency = {
             property: prop.name,
@@ -39,6 +55,7 @@ class PropertyDependencies {
             hideWhen: prop.displayOptions?.hide,
             notes: []
         };
+        // Extract show conditions
         if (prop.displayOptions?.show) {
             for (const [key, values] of Object.entries(prop.displayOptions.show)) {
                 const valuesArray = Array.isArray(values) ? values : [values];
@@ -50,6 +67,7 @@ class PropertyDependencies {
                 });
             }
         }
+        // Extract hide conditions
         if (prop.displayOptions?.hide) {
             for (const [key, values] of Object.entries(prop.displayOptions.hide)) {
                 const valuesArray = Array.isArray(values) ? values : [values];
@@ -61,6 +79,7 @@ class PropertyDependencies {
                 });
             }
         }
+        // Add helpful notes
         if (prop.type === 'collection' || prop.type === 'fixedCollection') {
             dependency.notes?.push('This property contains nested properties that may have their own dependencies');
         }
@@ -69,6 +88,9 @@ class PropertyDependencies {
         }
         return dependency;
     }
+    /**
+     * Generate human-readable condition description
+     */
     static generateConditionDescription(property, values, type, allProperties) {
         const prop = allProperties.find(p => p.name === property);
         const propName = prop?.displayName || property;
@@ -89,23 +111,30 @@ class PropertyDependencies {
             }
         }
     }
+    /**
+     * Generate suggestions based on dependency analysis
+     */
     static generateSuggestions(dependencies, suggestions) {
+        // Find properties that control many others
         const controllers = new Map();
         for (const dep of dependencies) {
             for (const condition of dep.dependsOn) {
                 controllers.set(condition.property, (controllers.get(condition.property) || 0) + 1);
             }
         }
+        // Suggest key properties to configure first
         const sortedControllers = Array.from(controllers.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 3);
         if (sortedControllers.length > 0) {
             suggestions.push(`Key properties to configure first: ${sortedControllers.map(([prop]) => prop).join(', ')}`);
         }
+        // Find complex dependency chains
         const complexDeps = dependencies.filter(d => d.dependsOn.length > 1);
         if (complexDeps.length > 0) {
             suggestions.push(`${complexDeps.length} properties have multiple dependencies - check their conditions carefully`);
         }
+        // Find circular dependencies (simplified check)
         for (const dep of dependencies) {
             for (const condition of dep.dependsOn) {
                 const targetDep = dependencies.find(d => d.property === condition.property);
@@ -115,6 +144,9 @@ class PropertyDependencies {
             }
         }
     }
+    /**
+     * Get properties that would be visible/hidden given a configuration
+     */
     static getVisibilityImpact(properties, config) {
         const visible = [];
         const hidden = [];
@@ -133,10 +165,14 @@ class PropertyDependencies {
         }
         return { visible, hidden, reasons };
     }
+    /**
+     * Check if a property is visible given current configuration
+     */
     static checkVisibility(prop, config) {
         if (!prop.displayOptions) {
             return { isVisible: true };
         }
+        // Check show conditions
         if (prop.displayOptions.show) {
             for (const [key, values] of Object.entries(prop.displayOptions.show)) {
                 const configValue = config[key];
@@ -149,6 +185,7 @@ class PropertyDependencies {
                 }
             }
         }
+        // Check hide conditions
         if (prop.displayOptions.hide) {
             for (const [key, values] of Object.entries(prop.displayOptions.hide)) {
                 const configValue = config[key];

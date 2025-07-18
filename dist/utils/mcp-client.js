@@ -6,8 +6,10 @@ const stdio_js_1 = require("@modelcontextprotocol/sdk/client/stdio.js");
 const websocket_js_1 = require("@modelcontextprotocol/sdk/client/websocket.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 class MCPClient {
+    client;
+    config;
+    connected = false;
     constructor(config) {
-        this.connected = false;
         this.config = config;
         this.client = new index_js_1.Client({
             name: 'n8n-mcp-client',
@@ -27,6 +29,7 @@ class MCPClient {
                 transport = new websocket_js_1.WebSocketClientTransport(new URL(wsUrl));
                 break;
             case 'stdio':
+                // For stdio, the serverUrl should be the command to execute
                 const [command, ...args] = this.config.serverUrl.split(' ');
                 transport = new stdio_js_1.StdioClientTransport({
                     command,

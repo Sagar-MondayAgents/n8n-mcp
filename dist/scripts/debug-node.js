@@ -8,6 +8,7 @@ async function debugNode() {
     const parser = new node_parser_1.NodeParser();
     console.log('Loading nodes...');
     const nodes = await loader.loadAllNodes();
+    // Find HTTP Request node
     const httpNode = nodes.find(n => n.nodeName === 'HttpRequest');
     if (httpNode) {
         console.log('\n=== HTTP Request Node Debug ===');
@@ -37,6 +38,7 @@ async function debugNode() {
     else {
         console.log('HTTP Request node not found');
     }
+    // Find Code node
     const codeNode = nodes.find(n => n.nodeName === 'Code');
     if (codeNode) {
         console.log('\n\n=== Code Node Debug ===');

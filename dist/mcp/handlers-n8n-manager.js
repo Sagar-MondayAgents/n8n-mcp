@@ -26,8 +26,10 @@ const logger_1 = require("../utils/logger");
 const zod_1 = require("zod");
 const workflow_validator_1 = require("../services/workflow-validator");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
+// Singleton n8n API client instance
 let apiClient = null;
 let lastConfigUrl = null;
+// Get or create API client (with lazy config loading)
 function getN8nApiClient() {
     const config = (0, n8n_api_1.getN8nApiConfig)();
     if (!config) {
@@ -38,6 +40,7 @@ function getN8nApiClient() {
         }
         return null;
     }
+    // Check if config has changed
     if (!apiClient || lastConfigUrl !== config.baseUrl) {
         logger_1.logger.info('n8n API client initialized', { url: config.baseUrl });
         apiClient = new n8n_api_client_1.N8nApiClient(config);
@@ -45,6 +48,7 @@ function getN8nApiClient() {
     }
     return apiClient;
 }
+// Helper to ensure API is configured
 function ensureApiConfigured() {
     const client = getN8nApiClient();
     if (!client) {
@@ -52,6 +56,7 @@ function ensureApiConfigured() {
     }
     return client;
 }
+// Zod schemas for input validation
 const createWorkflowSchema = zod_1.z.object({
     name: zod_1.z.string(),
     nodes: zod_1.z.array(zod_1.z.any()),
@@ -106,10 +111,12 @@ const listExecutionsSchema = zod_1.z.object({
     status: zod_1.z.enum(['success', 'error', 'waiting']).optional(),
     includeData: zod_1.z.boolean().optional(),
 });
+// Workflow Management Handlers
 async function handleCreateWorkflow(args) {
     try {
         const client = ensureApiConfigured();
         const input = createWorkflowSchema.parse(args);
+        // Validate workflow structure
         const errors = (0, n8n_validation_1.validateWorkflowStructure)(input);
         if (errors.length > 0) {
             return {
@@ -118,6 +125,7 @@ async function handleCreateWorkflow(args) {
                 details: { errors }
             };
         }
+        // Create workflow
         const workflow = await client.createWorkflow(input);
         return {
             success: true,
@@ -183,10 +191,12 @@ async function handleGetWorkflowDetails(args) {
         const client = ensureApiConfigured();
         const { id } = zod_1.z.object({ id: zod_1.z.string() }).parse(args);
         const workflow = await client.getWorkflow(id);
+        // Get recent executions for this workflow
         const executions = await client.listExecutions({
             workflowId: id,
             limit: 10
         });
+        // Calculate execution statistics
         const stats = {
             totalExecutions: executions.data.length,
             successCount: executions.data.filter(e => e.status === n8n_api_2.ExecutionStatus.SUCCESS).length,
@@ -229,6 +239,7 @@ async function handleGetWorkflowStructure(args) {
         const client = ensureApiConfigured();
         const { id } = zod_1.z.object({ id: zod_1.z.string() }).parse(args);
         const workflow = await client.getWorkflow(id);
+        // Simplify nodes to just essential structure
         const simplifiedNodes = workflow.nodes.map(node => ({
             id: node.id,
             name: node.name,
@@ -313,7 +324,9 @@ async function handleUpdateWorkflow(args) {
         const client = ensureApiConfigured();
         const input = updateWorkflowSchema.parse(args);
         const { id, ...updateData } = input;
+        // If nodes/connections are being updated, validate the structure
         if (updateData.nodes || updateData.connections) {
+            // Fetch current workflow if only partial update
             let fullWorkflow = updateData;
             if (!updateData.nodes || !updateData.connections) {
                 const current = await client.getWorkflow(id);
@@ -331,6 +344,7 @@ async function handleUpdateWorkflow(args) {
                 };
             }
         }
+        // Update workflow
         const workflow = await client.updateWorkflow(id, updateData);
         return {
             success: true,
@@ -437,13 +451,17 @@ async function handleValidateWorkflow(args, repository) {
     try {
         const client = ensureApiConfigured();
         const input = validateWorkflowSchema.parse(args);
+        // First, fetch the workflow from n8n
         const workflowResponse = await handleGetWorkflow({ id: input.id });
         if (!workflowResponse.success) {
-            return workflowResponse;
+            return workflowResponse; // Return the error from fetching
         }
         const workflow = workflowResponse.data;
+        // Create validator instance using the provided repository
         const validator = new workflow_validator_1.WorkflowValidator(repository, enhanced_config_validator_1.EnhancedConfigValidator);
+        // Run validation
         const validationResult = await validator.validateWorkflow(workflow, input.options);
+        // Format the response (same format as the regular validate_workflow tool)
         const response = {
             valid: validationResult.valid,
             workflowId: workflow.id,
@@ -502,6 +520,7 @@ async function handleValidateWorkflow(args, repository) {
         };
     }
 }
+// Execution Management Handlers
 async function handleTriggerWebhookWorkflow(args) {
     try {
         const client = ensureApiConfigured();
@@ -649,6 +668,7 @@ async function handleDeleteExecution(args) {
         };
     }
 }
+// System Tools Handlers
 async function handleHealthCheck() {
     try {
         const client = ensureApiConfigured();
@@ -736,17 +756,21 @@ async function handleListAvailableTools() {
         }
     };
 }
+// Handler: n8n_diagnostic
 async function handleDiagnostic(request) {
     const verbose = request.params?.arguments?.verbose || false;
+    // Check environment variables
     const envVars = {
         N8N_API_URL: process.env.N8N_API_URL || null,
         N8N_API_KEY: process.env.N8N_API_KEY ? '***configured***' : null,
         NODE_ENV: process.env.NODE_ENV || 'production',
         MCP_MODE: process.env.MCP_MODE || 'stdio'
     };
+    // Check API configuration
     const apiConfig = (0, n8n_api_1.getN8nApiConfig)();
     const apiConfigured = apiConfig !== null;
     const apiClient = getN8nApiClient();
+    // Test API connectivity if configured
     let apiStatus = {
         configured: apiConfigured,
         connected: false,
@@ -763,9 +787,11 @@ async function handleDiagnostic(request) {
             apiStatus.error = error instanceof Error ? error.message : 'Unknown error';
         }
     }
-    const documentationTools = 22;
+    // Check which tools are available
+    const documentationTools = 22; // Base documentation tools
     const managementTools = apiConfigured ? 16 : 0;
     const totalTools = documentationTools + managementTools;
+    // Build diagnostic report
     const diagnostic = {
         timestamp: new Date().toISOString(),
         environment: envVars,
@@ -811,6 +837,7 @@ async function handleDiagnostic(request) {
             documentation: 'For detailed setup instructions, see: https://github.com/czlonkowski/n8n-mcp#n8n-management-tools-new-v260---requires-api-configuration'
         }
     };
+    // Add verbose debug info if requested
     if (verbose) {
         diagnostic['debug'] = {
             processEnv: Object.keys(process.env).filter(key => key.startsWith('N8N_') || key.startsWith('MCP_')),

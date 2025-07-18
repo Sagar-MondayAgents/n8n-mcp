@@ -5,137 +5,139 @@ const n8n_workflow_1 = require("n8n-workflow");
 const mcp_client_1 = require("../utils/mcp-client");
 const bridge_1 = require("../utils/bridge");
 class MCPNode {
-    constructor() {
-        this.description = {
-            displayName: 'MCP',
-            name: 'mcp',
-            icon: 'file:mcp.svg',
-            group: ['transform'],
-            version: 1,
-            description: 'Interact with Model Context Protocol (MCP) servers',
-            defaults: {
-                name: 'MCP',
+    description = {
+        displayName: 'MCP',
+        name: 'mcp',
+        icon: 'file:mcp.svg',
+        group: ['transform'],
+        version: 1,
+        description: 'Interact with Model Context Protocol (MCP) servers',
+        defaults: {
+            name: 'MCP',
+        },
+        inputs: ['main'],
+        outputs: ['main'],
+        credentials: [
+            {
+                name: 'mcpApi',
+                required: true,
             },
-            inputs: ['main'],
-            outputs: ['main'],
-            credentials: [
-                {
-                    name: 'mcpApi',
-                    required: true,
-                },
-            ],
-            properties: [
-                {
-                    displayName: 'Operation',
-                    name: 'operation',
-                    type: 'options',
-                    noDataExpression: true,
-                    options: [
-                        {
-                            name: 'Call Tool',
-                            value: 'callTool',
-                            description: 'Execute an MCP tool',
-                        },
-                        {
-                            name: 'List Tools',
-                            value: 'listTools',
-                            description: 'List available MCP tools',
-                        },
-                        {
-                            name: 'Read Resource',
-                            value: 'readResource',
-                            description: 'Read an MCP resource',
-                        },
-                        {
-                            name: 'List Resources',
-                            value: 'listResources',
-                            description: 'List available MCP resources',
-                        },
-                        {
-                            name: 'Get Prompt',
-                            value: 'getPrompt',
-                            description: 'Get an MCP prompt',
-                        },
-                        {
-                            name: 'List Prompts',
-                            value: 'listPrompts',
-                            description: 'List available MCP prompts',
-                        },
-                    ],
-                    default: 'callTool',
-                },
-                {
-                    displayName: 'Tool Name',
-                    name: 'toolName',
-                    type: 'string',
-                    required: true,
-                    displayOptions: {
-                        show: {
-                            operation: ['callTool'],
-                        },
+        ],
+        properties: [
+            {
+                displayName: 'Operation',
+                name: 'operation',
+                type: 'options',
+                noDataExpression: true,
+                options: [
+                    {
+                        name: 'Call Tool',
+                        value: 'callTool',
+                        description: 'Execute an MCP tool',
                     },
-                    default: '',
-                    description: 'Name of the MCP tool to execute',
-                },
-                {
-                    displayName: 'Tool Arguments',
-                    name: 'toolArguments',
-                    type: 'json',
-                    required: false,
-                    displayOptions: {
-                        show: {
-                            operation: ['callTool'],
-                        },
+                    {
+                        name: 'List Tools',
+                        value: 'listTools',
+                        description: 'List available MCP tools',
                     },
-                    default: '{}',
-                    description: 'Arguments to pass to the MCP tool',
-                },
-                {
-                    displayName: 'Resource URI',
-                    name: 'resourceUri',
-                    type: 'string',
-                    required: true,
-                    displayOptions: {
-                        show: {
-                            operation: ['readResource'],
-                        },
+                    {
+                        name: 'Read Resource',
+                        value: 'readResource',
+                        description: 'Read an MCP resource',
                     },
-                    default: '',
-                    description: 'URI of the MCP resource to read',
-                },
-                {
-                    displayName: 'Prompt Name',
-                    name: 'promptName',
-                    type: 'string',
-                    required: true,
-                    displayOptions: {
-                        show: {
-                            operation: ['getPrompt'],
-                        },
+                    {
+                        name: 'List Resources',
+                        value: 'listResources',
+                        description: 'List available MCP resources',
                     },
-                    default: '',
-                    description: 'Name of the MCP prompt to retrieve',
-                },
-                {
-                    displayName: 'Prompt Arguments',
-                    name: 'promptArguments',
-                    type: 'json',
-                    required: false,
-                    displayOptions: {
-                        show: {
-                            operation: ['getPrompt'],
-                        },
+                    {
+                        name: 'Get Prompt',
+                        value: 'getPrompt',
+                        description: 'Get an MCP prompt',
                     },
-                    default: '{}',
-                    description: 'Arguments to pass to the MCP prompt',
+                    {
+                        name: 'List Prompts',
+                        value: 'listPrompts',
+                        description: 'List available MCP prompts',
+                    },
+                ],
+                default: 'callTool',
+            },
+            // Tool-specific fields
+            {
+                displayName: 'Tool Name',
+                name: 'toolName',
+                type: 'string',
+                required: true,
+                displayOptions: {
+                    show: {
+                        operation: ['callTool'],
+                    },
                 },
-            ],
-        };
-    }
+                default: '',
+                description: 'Name of the MCP tool to execute',
+            },
+            {
+                displayName: 'Tool Arguments',
+                name: 'toolArguments',
+                type: 'json',
+                required: false,
+                displayOptions: {
+                    show: {
+                        operation: ['callTool'],
+                    },
+                },
+                default: '{}',
+                description: 'Arguments to pass to the MCP tool',
+            },
+            // Resource-specific fields
+            {
+                displayName: 'Resource URI',
+                name: 'resourceUri',
+                type: 'string',
+                required: true,
+                displayOptions: {
+                    show: {
+                        operation: ['readResource'],
+                    },
+                },
+                default: '',
+                description: 'URI of the MCP resource to read',
+            },
+            // Prompt-specific fields
+            {
+                displayName: 'Prompt Name',
+                name: 'promptName',
+                type: 'string',
+                required: true,
+                displayOptions: {
+                    show: {
+                        operation: ['getPrompt'],
+                    },
+                },
+                default: '',
+                description: 'Name of the MCP prompt to retrieve',
+            },
+            {
+                displayName: 'Prompt Arguments',
+                name: 'promptArguments',
+                type: 'json',
+                required: false,
+                displayOptions: {
+                    show: {
+                        operation: ['getPrompt'],
+                    },
+                },
+                default: '{}',
+                description: 'Arguments to pass to the MCP prompt',
+            },
+        ],
+    };
     async execute() {
         const items = this.getInputData();
         const returnData = [];
         const operation = this.getNodeParameter('operation', 0);
+        // Get credentials
         const credentials = await this.getCredentials('mcpApi');
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
@@ -189,6 +191,7 @@ class MCPNode {
         }
         return [returnData];
     }
+    // MCP client methods
     async getMCPClient(credentials) {
         const client = new mcp_client_1.MCPClient({
             serverUrl: credentials.serverUrl,

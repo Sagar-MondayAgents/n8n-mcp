@@ -432,6 +432,7 @@ ${essentials.tips.map(tip => `- ${tip}`).join('\n')}
 
 For full documentation, use: tools_documentation({topic: "${toolName}", depth: "full"})`;
     }
+    // Full documentation
     const { full } = tool;
     return `# ${tool.name}
 
@@ -486,6 +487,7 @@ Welcome! Here's how to efficiently work with n8n nodes:
 
 Available tools: ${Object.keys(exports.toolsDocumentation).join(', ')}`;
     }
+    // Full overview
     return `# n8n MCP Tools Complete Guide
 
 ## Overview

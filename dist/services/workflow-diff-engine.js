@@ -1,12 +1,20 @@
 "use strict";
+/**
+ * Workflow Diff Engine
+ * Applies diff operations to n8n workflows
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkflowDiffEngine = void 0;
 const uuid_1 = require("uuid");
 const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[WorkflowDiffEngine]' });
 class WorkflowDiffEngine {
+    /**
+     * Apply diff operations to a workflow
+     */
     async applyDiff(workflow, request) {
         try {
+            // Limit operations to keep complexity manageable
             if (request.operations.length > 5) {
                 return {
                     success: false,
@@ -16,7 +24,9 @@ class WorkflowDiffEngine {
                         }]
                 };
             }
+            // Clone workflow to avoid modifying original
             const workflowCopy = JSON.parse(JSON.stringify(workflow));
+            // Group operations by type for two-pass processing
             const nodeOperationTypes = ['addNode', 'removeNode', 'updateNode', 'moveNode', 'enableNode', 'disableNode'];
             const nodeOperations = [];
             const otherOperations = [];
@@ -28,6 +38,7 @@ class WorkflowDiffEngine {
                     otherOperations.push({ operation, index });
                 }
             });
+            // Pass 1: Validate and apply node operations first
             for (const { operation, index } of nodeOperations) {
                 const error = this.validateOperation(workflowCopy, operation);
                 if (error) {
@@ -40,6 +51,7 @@ class WorkflowDiffEngine {
                             }]
                     };
                 }
+                // Always apply to working copy for proper validation of subsequent operations
                 try {
                     this.applyOperation(workflowCopy, operation);
                 }
@@ -54,6 +66,7 @@ class WorkflowDiffEngine {
                     };
                 }
             }
+            // Pass 2: Validate and apply other operations (connections, metadata)
             for (const { operation, index } of otherOperations) {
                 const error = this.validateOperation(workflowCopy, operation);
                 if (error) {
@@ -66,6 +79,7 @@ class WorkflowDiffEngine {
                             }]
                     };
                 }
+                // Always apply to working copy for proper validation of subsequent operations
                 try {
                     this.applyOperation(workflowCopy, operation);
                 }
@@ -80,6 +94,7 @@ class WorkflowDiffEngine {
                     };
                 }
             }
+            // If validateOnly flag is set, return success without applying
             if (request.validateOnly) {
                 return {
                     success: true,
@@ -105,6 +120,9 @@ class WorkflowDiffEngine {
             };
         }
     }
+    /**
+     * Validate a single operation
+     */
     validateOperation(workflow, operation) {
         switch (operation.type) {
             case 'addNode':
@@ -128,11 +146,14 @@ class WorkflowDiffEngine {
             case 'updateName':
             case 'addTag':
             case 'removeTag':
-                return null;
+                return null; // These are always valid
             default:
                 return `Unknown operation type: ${operation.type}`;
         }
     }
+    /**
+     * Apply a single operation to the workflow
+     */
     applyOperation(workflow, operation) {
         switch (operation.type) {
             case 'addNode':
@@ -176,11 +197,14 @@ class WorkflowDiffEngine {
                 break;
         }
     }
+    // Node operation validators
     validateAddNode(workflow, operation) {
         const { node } = operation;
+        // Check if node with same name already exists
         if (workflow.nodes.some(n => n.name === node.name)) {
             return `Node with name "${node.name}" already exists`;
         }
+        // Validate node type format
         if (!node.type.includes('.')) {
             return `Invalid node type "${node.type}". Must include package prefix (e.g., "n8n-nodes-base.webhook")`;
         }
@@ -194,10 +218,12 @@ class WorkflowDiffEngine {
         if (!node) {
             return `Node not found: ${operation.nodeId || operation.nodeName}`;
         }
+        // Check if node has connections that would be broken
         const hasConnections = Object.values(workflow.connections).some(conn => {
             return Object.values(conn).some(outputs => outputs.some(connections => connections.some(c => c.node === node.name)));
         });
         if (hasConnections || workflow.connections[node.name]) {
+            // This is a warning, not an error - connections will be cleaned up
             logger.warn(`Removing node "${node.name}" will break existing connections`);
         }
         return null;
@@ -223,6 +249,7 @@ class WorkflowDiffEngine {
         }
         return null;
     }
+    // Connection operation validators
     validateAddConnection(workflow, operation) {
         const sourceNode = this.findNode(workflow, operation.source, operation.source);
         const targetNode = this.findNode(workflow, operation.target, operation.target);
@@ -232,6 +259,7 @@ class WorkflowDiffEngine {
         if (!targetNode) {
             return `Target node not found: ${operation.target}`;
         }
+        // Check if connection already exists
         const sourceOutput = operation.sourceOutput || 'main';
         const existing = workflow.connections[sourceNode.name]?.[sourceOutput];
         if (existing) {
@@ -271,10 +299,12 @@ class WorkflowDiffEngine {
         if (!targetNode) {
             return `Target node not found: ${operation.target}`;
         }
+        // Check if connection exists to update
         const existingConnections = workflow.connections[sourceNode.name];
         if (!existingConnections) {
             return `No connections found from "${sourceNode.name}"`;
         }
+        // Check if any connection to target exists
         let hasConnection = false;
         Object.values(existingConnections).forEach(outputs => {
             outputs.forEach(connections => {
@@ -288,6 +318,7 @@ class WorkflowDiffEngine {
         }
         return null;
     }
+    // Node operation appliers
     applyAddNode(workflow, operation) {
         const newNode = {
             id: operation.node.id || (0, uuid_1.v4)(),
@@ -313,19 +344,24 @@ class WorkflowDiffEngine {
         const node = this.findNode(workflow, operation.nodeId, operation.nodeName);
         if (!node)
             return;
+        // Remove node from array
         const index = workflow.nodes.findIndex(n => n.id === node.id);
         if (index !== -1) {
             workflow.nodes.splice(index, 1);
         }
+        // Remove all connections from this node
         delete workflow.connections[node.name];
+        // Remove all connections to this node
         Object.keys(workflow.connections).forEach(sourceName => {
             const sourceConnections = workflow.connections[sourceName];
             Object.keys(sourceConnections).forEach(outputName => {
                 sourceConnections[outputName] = sourceConnections[outputName].map(connections => connections.filter(conn => conn.node !== node.name)).filter(connections => connections.length > 0);
+                // Clean up empty arrays
                 if (sourceConnections[outputName].length === 0) {
                     delete sourceConnections[outputName];
                 }
             });
+            // Clean up empty connection objects
             if (Object.keys(sourceConnections).length === 0) {
                 delete workflow.connections[sourceName];
             }
@@ -335,6 +371,7 @@ class WorkflowDiffEngine {
         const node = this.findNode(workflow, operation.nodeId, operation.nodeName);
         if (!node)
             return;
+        // Apply changes using dot notation
         Object.entries(operation.changes).forEach(([path, value]) => {
             this.setNestedProperty(node, path, value);
         });
@@ -357,6 +394,7 @@ class WorkflowDiffEngine {
             return;
         node.disabled = true;
     }
+    // Connection operation appliers
     applyAddConnection(workflow, operation) {
         const sourceNode = this.findNode(workflow, operation.source, operation.source);
         const targetNode = this.findNode(workflow, operation.target, operation.target);
@@ -366,15 +404,18 @@ class WorkflowDiffEngine {
         const targetInput = operation.targetInput || 'main';
         const sourceIndex = operation.sourceIndex || 0;
         const targetIndex = operation.targetIndex || 0;
+        // Initialize connections structure if needed
         if (!workflow.connections[sourceNode.name]) {
             workflow.connections[sourceNode.name] = {};
         }
         if (!workflow.connections[sourceNode.name][sourceOutput]) {
             workflow.connections[sourceNode.name][sourceOutput] = [];
         }
+        // Ensure we have array at the source index
         while (workflow.connections[sourceNode.name][sourceOutput].length <= sourceIndex) {
             workflow.connections[sourceNode.name][sourceOutput].push([]);
         }
+        // Add connection
         workflow.connections[sourceNode.name][sourceOutput][sourceIndex].push({
             node: targetNode.name,
             type: targetInput,
@@ -390,7 +431,9 @@ class WorkflowDiffEngine {
         const connections = workflow.connections[sourceNode.name]?.[sourceOutput];
         if (!connections)
             return;
+        // Remove connection from all indices
         workflow.connections[sourceNode.name][sourceOutput] = connections.map(conns => conns.filter(conn => conn.node !== targetNode.name));
+        // Clean up empty arrays
         workflow.connections[sourceNode.name][sourceOutput] =
             workflow.connections[sourceNode.name][sourceOutput].filter(conns => conns.length > 0);
         if (workflow.connections[sourceNode.name][sourceOutput].length === 0) {
@@ -401,6 +444,7 @@ class WorkflowDiffEngine {
         }
     }
     applyUpdateConnection(workflow, operation) {
+        // For now, implement as remove + add
         this.applyRemoveConnection(workflow, {
             type: 'removeConnection',
             source: operation.source,
@@ -418,6 +462,7 @@ class WorkflowDiffEngine {
             targetIndex: operation.changes.targetIndex
         });
     }
+    // Metadata operation appliers
     applyUpdateSettings(workflow, operation) {
         if (!workflow.settings) {
             workflow.settings = {};
@@ -443,6 +488,7 @@ class WorkflowDiffEngine {
             workflow.tags.splice(index, 1);
         }
     }
+    // Helper methods
     findNode(workflow, nodeId, nodeName) {
         if (nodeId) {
             const nodeById = workflow.nodes.find(n => n.id === nodeId);
@@ -454,6 +500,7 @@ class WorkflowDiffEngine {
             if (nodeByName)
                 return nodeByName;
         }
+        // If nodeId is provided but not found, try treating it as a name
         if (nodeId && !nodeName) {
             const nodeByName = workflow.nodes.find(n => n.name === nodeId);
             if (nodeByName)

@@ -1,14 +1,27 @@
 "use strict";
+/**
+ * Enhanced Configuration Validator Service
+ *
+ * Provides operation-aware validation for n8n nodes with reduced false positives.
+ * Supports multiple validation modes and node-specific logic.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedConfigValidator = void 0;
 const config_validator_1 = require("./config-validator");
 const node_specific_validators_1 = require("./node-specific-validators");
 const example_generator_1 = require("./example-generator");
 class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
+    /**
+     * Validate with operation awareness
+     */
     static validateWithMode(nodeType, config, properties, mode = 'operation', profile = 'ai-friendly') {
+        // Extract operation context from config
         const operationContext = this.extractOperationContext(config);
+        // Filter properties based on mode and operation
         const filteredProperties = this.filterPropertiesByMode(properties, config, mode, operationContext);
+        // Perform base validation on filtered properties
         const baseResult = super.validate(nodeType, config, filteredProperties);
+        // Enhance the result
         const enhancedResult = {
             ...baseResult,
             mode,
@@ -17,15 +30,23 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             examples: [],
             nextSteps: []
         };
+        // Apply profile-based filtering
         this.applyProfileFilters(enhancedResult, profile);
+        // Add operation-specific enhancements
         this.addOperationSpecificEnhancements(nodeType, config, enhancedResult);
+        // Deduplicate errors
         enhancedResult.errors = this.deduplicateErrors(enhancedResult.errors);
+        // Add examples from ExampleGenerator if there are errors
         if (enhancedResult.errors.length > 0) {
             this.addExamplesFromGenerator(nodeType, enhancedResult);
         }
+        // Generate next steps based on errors
         enhancedResult.nextSteps = this.generateNextSteps(enhancedResult);
         return enhancedResult;
     }
+    /**
+     * Extract operation context from configuration
+     */
     static extractOperationContext(config) {
         return {
             resource: config.resource,
@@ -34,26 +55,39 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             mode: config.mode
         };
     }
+    /**
+     * Filter properties based on validation mode and operation
+     */
     static filterPropertiesByMode(properties, config, mode, operation) {
         switch (mode) {
             case 'minimal':
+                // Only required properties that are visible
                 return properties.filter(prop => prop.required && this.isPropertyVisible(prop, config));
             case 'operation':
+                // Only properties relevant to the current operation
                 return properties.filter(prop => this.isPropertyRelevantToOperation(prop, config, operation));
             case 'full':
             default:
+                // All properties (current behavior)
                 return properties;
         }
     }
+    /**
+     * Check if property is relevant to current operation
+     */
     static isPropertyRelevantToOperation(prop, config, operation) {
+        // First check if visible
         if (!this.isPropertyVisible(prop, config)) {
             return false;
         }
+        // If no operation context, include all visible
         if (!operation.resource && !operation.operation && !operation.action) {
             return true;
         }
+        // Check if property has operation-specific display options
         if (prop.displayOptions?.show) {
             const show = prop.displayOptions.show;
+            // Check each operation field
             if (operation.resource && show.resource) {
                 const expectedResources = Array.isArray(show.resource) ? show.resource : [show.resource];
                 if (!expectedResources.includes(operation.resource)) {
@@ -75,7 +109,11 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
         }
         return true;
     }
+    /**
+     * Add operation-specific enhancements to validation result
+     */
     static addOperationSpecificEnhancements(nodeType, config, result) {
+        // Create context for node-specific validators
         const context = {
             config,
             errors: result.errors,
@@ -83,6 +121,7 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             suggestions: result.suggestions,
             autofix: result.autofix || {}
         };
+        // Use node-specific validators
         switch (nodeType) {
             case 'nodes-base.slack':
                 node_specific_validators_1.NodeSpecificValidators.validateSlack(context);
@@ -93,9 +132,11 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                 this.enhanceGoogleSheetsValidation(config, result);
                 break;
             case 'nodes-base.httpRequest':
+                // Use existing HTTP validation from base class
                 this.enhanceHttpRequestValidation(config, result);
                 break;
             case 'nodes-base.code':
+                // Code node uses base validation which includes syntax checks
                 break;
             case 'nodes-base.openAi':
                 node_specific_validators_1.NodeSpecificValidators.validateOpenAI(context);
@@ -113,13 +154,18 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                 node_specific_validators_1.NodeSpecificValidators.validateMySQL(context);
                 break;
         }
+        // Update autofix if changes were made
         if (Object.keys(context.autofix).length > 0) {
             result.autofix = context.autofix;
         }
     }
+    /**
+     * Enhanced Slack validation with operation awareness
+     */
     static enhanceSlackValidation(config, result) {
         const { resource, operation } = result.operation || {};
         if (resource === 'message' && operation === 'send') {
+            // Add example for sending a message
             result.examples?.push({
                 description: 'Send a simple text message to a channel',
                 config: {
@@ -129,6 +175,7 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                     text: 'Hello from n8n!'
                 }
             });
+            // Check for common issues
             if (!config.channel && !config.channelId) {
                 const channelError = result.errors.find(e => e.property === 'channel' || e.property === 'channelId');
                 if (channelError) {
@@ -148,6 +195,9 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             });
         }
     }
+    /**
+     * Enhanced Google Sheets validation
+     */
     static enhanceGoogleSheetsValidation(config, result) {
         const { operation } = result.operation || {};
         if (operation === 'append') {
@@ -162,6 +212,7 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                     }
                 }
             });
+            // Validate range format
             if (config.range && !config.range.includes('!')) {
                 result.warnings.push({
                     type: 'inefficient',
@@ -172,7 +223,11 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             }
         }
     }
+    /**
+     * Enhanced HTTP Request validation
+     */
     static enhanceHttpRequestValidation(config, result) {
+        // Add common examples based on method
         if (config.method === 'GET') {
             result.examples?.push({
                 description: 'GET request with query parameters',
@@ -201,8 +256,12 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             });
         }
     }
+    /**
+     * Generate actionable next steps based on validation results
+     */
     static generateNextSteps(result) {
         const steps = [];
+        // Group errors by type
         const requiredErrors = result.errors.filter(e => e.type === 'missing_required');
         const typeErrors = result.errors.filter(e => e.type === 'invalid_type');
         const valueErrors = result.errors.filter(e => e.type === 'invalid_value');
@@ -223,18 +282,24 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
         }
         return steps;
     }
+    /**
+     * Add examples from ExampleGenerator to help fix validation errors
+     */
     static addExamplesFromGenerator(nodeType, result) {
         const examples = example_generator_1.ExampleGenerator.getExamples(nodeType);
         if (!examples) {
             return;
         }
+        // Add minimal example if there are missing required fields
         if (result.errors.some(e => e.type === 'missing_required')) {
             result.examples?.push({
                 description: 'Minimal working configuration',
                 config: examples.minimal
             });
         }
+        // Add common example if available
         if (examples.common) {
+            // Check if the common example matches the operation context
             const { operation } = result.operation || {};
             const commonOp = examples.common.operation || examples.common.action;
             if (!operation || operation === commonOp) {
@@ -244,6 +309,7 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                 });
             }
         }
+        // Add advanced example for complex validation errors
         if (examples.advanced && result.errors.length > 2) {
             result.examples?.push({
                 description: 'Advanced configuration with all options',
@@ -251,6 +317,10 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
             });
         }
     }
+    /**
+     * Deduplicate errors based on property and type
+     * Prefers more specific error messages over generic ones
+     */
     static deduplicateErrors(errors) {
         const seen = new Map();
         for (const error of errors) {
@@ -260,6 +330,7 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                 seen.set(key, error);
             }
             else {
+                // Keep the error with more specific message or fix
                 const existingLength = (existing.message?.length || 0) + (existing.fix?.length || 0);
                 const newLength = (error.message?.length || 0) + (error.fix?.length || 0);
                 if (newLength > existingLength) {
@@ -269,21 +340,28 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
         }
         return Array.from(seen.values());
     }
+    /**
+     * Apply profile-based filtering to validation results
+     */
     static applyProfileFilters(result, profile) {
         switch (profile) {
             case 'minimal':
+                // Only keep missing required errors
                 result.errors = result.errors.filter(e => e.type === 'missing_required');
                 result.warnings = [];
                 result.suggestions = [];
                 break;
             case 'runtime':
+                // Keep critical runtime errors only
                 result.errors = result.errors.filter(e => e.type === 'missing_required' ||
                     e.type === 'invalid_value' ||
                     (e.type === 'invalid_type' && e.message.includes('undefined')));
+                // Keep only security warnings
                 result.warnings = result.warnings.filter(w => w.type === 'security');
                 result.suggestions = [];
                 break;
             case 'strict':
+                // Keep everything, add more suggestions
                 if (result.warnings.length === 0 && result.errors.length === 0) {
                     result.suggestions.push('Consider adding error handling and timeout configuration');
                     result.suggestions.push('Add authentication if connecting to external services');
@@ -291,6 +369,8 @@ class EnhancedConfigValidator extends config_validator_1.ConfigValidator {
                 break;
             case 'ai-friendly':
             default:
+                // Current behavior - balanced for AI agents
+                // Filter out noise but keep helpful warnings
                 result.warnings = result.warnings.filter(w => w.type !== 'inefficient' || !w.property?.startsWith('_'));
                 break;
         }

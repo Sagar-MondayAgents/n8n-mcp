@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.N8NApiClient = void 0;
 class N8NApiClient {
+    config;
+    headers;
     constructor(config) {
         this.config = config;
         this.headers = {
@@ -29,6 +31,7 @@ class N8NApiClient {
             throw new Error(`Failed to connect to n8n: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
+    // Workflow operations
     async getWorkflows(filters) {
         const query = new URLSearchParams();
         if (filters?.active !== undefined) {
@@ -69,6 +72,7 @@ class N8NApiClient {
             method: 'POST',
         });
     }
+    // Execution operations
     async executeWorkflow(id, data) {
         return this.request(`/workflows/${id}/execute`, {
             method: 'POST',
@@ -96,19 +100,25 @@ class N8NApiClient {
             method: 'DELETE',
         });
     }
+    // Credential operations
     async getCredentialTypes() {
         return this.request('/credential-types');
     }
     async getCredentials() {
         return this.request('/credentials');
     }
+    // Node operations
     async getNodeTypes() {
         return this.request('/node-types');
     }
     async getNodeType(nodeType) {
         return this.request(`/node-types/${nodeType}`);
     }
+    // Extended methods for node source extraction
     async getNodeSourceCode(nodeType) {
+        // This is a special endpoint we'll need to handle differently
+        // as n8n doesn't expose source code directly through API
+        // We'll need to implement this through file system access
         throw new Error('Node source code extraction requires special implementation');
     }
     async getNodeDescription(nodeType) {

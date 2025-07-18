@@ -1,7 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.n8nManagementTools = void 0;
+/**
+ * n8n Management Tools
+ *
+ * These tools enable AI agents to manage n8n workflows through the n8n API.
+ * They require N8N_API_URL and N8N_API_KEY to be configured.
+ */
 exports.n8nManagementTools = [
+    // Workflow Management Tools
     {
         name: 'n8n_create_workflow',
         description: `Create a new workflow in n8n. Requires workflow name, nodes array, and connections object. The workflow will be created in inactive state and must be manually activated in the UI. Returns the created workflow with its ID.`,
@@ -259,7 +266,7 @@ Validation example:
 }`,
         inputSchema: {
             type: 'object',
-            additionalProperties: true,
+            additionalProperties: true, // Allow any extra properties Claude Desktop might add
             properties: {
                 id: {
                     type: 'string',
@@ -366,6 +373,7 @@ Validation example:
             required: ['id']
         }
     },
+    // Execution Management Tools
     {
         name: 'n8n_trigger_webhook_workflow',
         description: `Trigger a workflow via webhook. Workflow must be ACTIVE and have a Webhook trigger node. HTTP method must match webhook configuration.`,
@@ -463,6 +471,7 @@ Validation example:
             required: ['id']
         }
     },
+    // System Tools
     {
         name: 'n8n_health_check',
         description: `Check n8n instance health and API connectivity. Returns status and available features.`,

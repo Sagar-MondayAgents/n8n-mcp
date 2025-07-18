@@ -6,6 +6,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = __importDefault(require("axios"));
 const dotenv_1 = require("dotenv");
+// Load environment variables
 (0, dotenv_1.config)();
 async function debugN8nAuth() {
     const apiUrl = process.env.N8N_API_URL;
@@ -18,6 +19,7 @@ async function debugN8nAuth() {
     console.log('Testing n8n API Authentication...');
     console.log('API URL:', apiUrl);
     console.log('API Key:', apiKey.substring(0, 20) + '...');
+    // Test 1: Direct health check
     console.log('\n=== Test 1: Direct Health Check (no auth) ===');
     try {
         const healthResponse = await axios_1.default.get(`${apiUrl}/api/v1/health`);
@@ -26,6 +28,7 @@ async function debugN8nAuth() {
     catch (error) {
         console.log('Health Check Error:', error.response?.status, error.response?.data || error.message);
     }
+    // Test 2: Workflows with API key
     console.log('\n=== Test 2: List Workflows (with auth) ===');
     try {
         const workflowsResponse = await axios_1.default.get(`${apiUrl}/api/v1/workflows`, {
@@ -43,7 +46,9 @@ async function debugN8nAuth() {
             console.log('Response Headers:', error.response.headers);
         }
     }
+    // Test 3: Try different auth header formats
     console.log('\n=== Test 3: Alternative Auth Headers ===');
+    // Try Bearer token
     try {
         const bearerResponse = await axios_1.default.get(`${apiUrl}/api/v1/workflows`, {
             headers: {
@@ -57,6 +62,7 @@ async function debugN8nAuth() {
     catch (error) {
         console.log('Bearer Auth Error:', error.response?.status);
     }
+    // Try lowercase header
     try {
         const lowercaseResponse = await axios_1.default.get(`${apiUrl}/api/v1/workflows`, {
             headers: {
@@ -70,6 +76,7 @@ async function debugN8nAuth() {
     catch (error) {
         console.log('Lowercase Header Error:', error.response?.status);
     }
+    // Test 4: Check API endpoint structure
     console.log('\n=== Test 4: API Endpoint Structure ===');
     const endpoints = [
         '/api/v1/workflows',

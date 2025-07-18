@@ -7,10 +7,8 @@ exports.TemplateFetcher = void 0;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
 class TemplateFetcher {
-    constructor() {
-        this.baseUrl = 'https://api.n8n.io/api/templates';
-        this.pageSize = 100;
-    }
+    baseUrl = 'https://api.n8n.io/api/templates';
+    pageSize = 100;
     async fetchTemplates(progressCallback) {
         const oneYearAgo = new Date();
         oneYearAgo.setMonth(oneYearAgo.getMonth() - 12);
@@ -28,10 +26,12 @@ class TemplateFetcher {
                     }
                 });
                 const { workflows, totalWorkflows } = response.data;
+                // Filter templates by date
                 const recentTemplates = workflows.filter((w) => {
                     const createdDate = new Date(w.createdAt);
                     return createdDate >= oneYearAgo;
                 });
+                // If we hit templates older than 1 year, stop fetching
                 if (recentTemplates.length < workflows.length) {
                     hasMore = false;
                     logger_1.logger.info(`Reached templates older than 1 year at page ${page}`);
@@ -40,12 +40,14 @@ class TemplateFetcher {
                 if (progressCallback) {
                     progressCallback(allTemplates.length, Math.min(totalWorkflows, allTemplates.length + 500));
                 }
+                // Check if there are more pages
                 if (workflows.length < this.pageSize || allTemplates.length >= totalWorkflows) {
                     hasMore = false;
                 }
                 page++;
+                // Rate limiting - be nice to the API
                 if (hasMore) {
-                    await this.sleep(500);
+                    await this.sleep(500); // 500ms between requests
                 }
             }
             catch (error) {
@@ -77,10 +79,12 @@ class TemplateFetcher {
                 if (progressCallback) {
                     progressCallback(i + 1, workflows.length);
                 }
-                await this.sleep(200);
+                // Rate limiting
+                await this.sleep(200); // 200ms between requests
             }
             catch (error) {
                 logger_1.logger.error(`Failed to fetch details for workflow ${workflow.id}:`, error);
+                // Continue with other templates
             }
         }
         logger_1.logger.info(`Successfully fetched ${details.size} template details`);

@@ -12,36 +12,49 @@ const enhanced_documentation_fetcher_1 = require("../utils/enhanced-documentatio
 const example_generator_1 = require("../utils/example-generator");
 const database_adapter_1 = require("../database/database-adapter");
 class NodeDocumentationService {
+    db = null;
+    extractor;
+    docsFetcher;
+    dbPath;
+    initialized;
     constructor(dbPath) {
-        this.db = null;
+        // Determine database path with multiple fallbacks for npx support
         this.dbPath = dbPath || process.env.NODE_DB_PATH || this.findDatabasePath();
+        // Ensure directory exists
         const dbDir = path_1.default.dirname(this.dbPath);
         if (!require('fs').existsSync(dbDir)) {
             require('fs').mkdirSync(dbDir, { recursive: true });
         }
         this.extractor = new node_source_extractor_1.NodeSourceExtractor();
         this.docsFetcher = new enhanced_documentation_fetcher_1.EnhancedDocumentationFetcher();
+        // Initialize database asynchronously
         this.initialized = this.initializeAsync();
     }
     findDatabasePath() {
         const fs = require('fs');
+        // Priority order for database locations:
+        // 1. Local working directory (current behavior)
         const localPath = path_1.default.join(process.cwd(), 'data', 'nodes.db');
         if (fs.existsSync(localPath)) {
             return localPath;
         }
+        // 2. Package installation directory (for npx)
         const packagePath = path_1.default.join(__dirname, '..', '..', 'data', 'nodes.db');
         if (fs.existsSync(packagePath)) {
             return packagePath;
         }
+        // 3. Global npm modules directory (for global install)
         const globalPath = path_1.default.join(__dirname, '..', '..', '..', 'data', 'nodes.db');
         if (fs.existsSync(globalPath)) {
             return globalPath;
         }
+        // 4. Default to local path (will be created if needed)
         return localPath;
     }
     async initializeAsync() {
         try {
             this.db = await (0, database_adapter_1.createDatabaseAdapter)(this.dbPath);
+            // Initialize database with new schema
             this.initializeDatabase();
             logger_1.logger.info('Node Documentation Service initialized');
         }
@@ -59,6 +72,7 @@ class NodeDocumentationService {
     initializeDatabase() {
         if (!this.db)
             throw new Error('Database not initialized');
+        // Execute the schema directly
         const schema = `
 -- Main nodes table with documentation and examples
 CREATE TABLE IF NOT EXISTS nodes (
@@ -171,6 +185,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
     `;
         this.db.exec(schema);
     }
+    /**
+     * Store complete node information including docs and examples
+     */
     async storeNode(nodeInfo) {
         await this.ensureInitialized();
         const hash = this.generateHash(nodeInfo.sourceCode);
@@ -226,6 +243,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             isWebhook: nodeInfo.isWebhook ? 1 : 0
         });
     }
+    /**
+     * Get complete node information
+     */
     async getNodeInfo(nodeType) {
         await this.ensureInitialized();
         const stmt = this.db.prepare(`
@@ -236,6 +256,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             return null;
         return this.rowToNodeInfo(row);
     }
+    /**
+     * Search nodes with various filters
+     */
     async searchNodes(options) {
         await this.ensureInitialized();
         let query = 'SELECT * FROM nodes WHERE 1=1';
@@ -273,17 +296,25 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
         const rows = stmt.all(params);
         return rows.map(row => this.rowToNodeInfo(row));
     }
+    /**
+     * List all nodes
+     */
     async listNodes() {
         await this.ensureInitialized();
         const stmt = this.db.prepare('SELECT * FROM nodes ORDER BY name');
         const rows = stmt.all();
         return rows.map(row => this.rowToNodeInfo(row));
     }
+    /**
+     * Extract and store all nodes with documentation
+     */
     async rebuildDatabase() {
         await this.ensureInitialized();
         logger_1.logger.info('Starting complete database rebuild...');
+        // Clear existing data
         this.db.exec('DELETE FROM nodes');
         this.db.exec('DELETE FROM extraction_stats');
+        // Ensure documentation repository is available
         await this.docsFetcher.ensureDocsRepository();
         const stats = {
             total: 0,
@@ -292,22 +323,30 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             errors: []
         };
         try {
+            // Get all available nodes
             const availableNodes = await this.extractor.listAvailableNodes();
             stats.total = availableNodes.length;
             logger_1.logger.info(`Found ${stats.total} nodes to process`);
+            // Process nodes in batches
             const batchSize = 10;
             for (let i = 0; i < availableNodes.length; i += batchSize) {
                 const batch = availableNodes.slice(i, i + batchSize);
                 await Promise.all(batch.map(async (node) => {
                     try {
+                        // Build node type from package name and node name
                         const nodeType = `n8n-nodes-base.${node.name}`;
+                        // Extract source code
                         const nodeData = await this.extractor.extractNodeSource(nodeType);
                         if (!nodeData || !nodeData.sourceCode) {
                             throw new Error('Failed to extract node source');
                         }
+                        // Parse node definition to get metadata
                         const nodeDefinition = this.parseNodeDefinition(nodeData.sourceCode);
+                        // Get enhanced documentation
                         const enhancedDocs = await this.docsFetcher.getEnhancedNodeDocumentation(nodeType);
+                        // Generate example
                         const example = example_generator_1.ExampleGenerator.generateFromNodeDefinition(nodeDefinition);
+                        // Prepare node info with enhanced documentation
                         const nodeInfo = {
                             nodeType: nodeType,
                             name: node.name,
@@ -338,6 +377,7 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
                             isTrigger: node.name.toLowerCase().includes('trigger'),
                             isWebhook: node.name.toLowerCase().includes('webhook')
                         };
+                        // Store in database
                         await this.storeNode(nodeInfo);
                         stats.successful++;
                         logger_1.logger.debug(`Processed node: ${nodeType}`);
@@ -351,6 +391,7 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
                 }));
                 logger_1.logger.info(`Progress: ${Math.min(i + batchSize, availableNodes.length)}/${stats.total} nodes processed`);
             }
+            // Store statistics
             this.storeStatistics(stats);
             logger_1.logger.info(`Database rebuild complete: ${stats.successful} successful, ${stats.failed} failed`);
         }
@@ -360,6 +401,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
         }
         return stats;
     }
+    /**
+     * Parse node definition from source code
+     */
     parseNodeDefinition(sourceCode) {
         const result = {
             displayName: '',
@@ -373,44 +417,56 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             alias: null
         };
         try {
+            // Extract individual properties using specific patterns
+            // Display name
             const displayNameMatch = sourceCode.match(/displayName\s*[:=]\s*['"`]([^'"`]+)['"`]/);
             if (displayNameMatch) {
                 result.displayName = displayNameMatch[1];
             }
+            // Description
             const descriptionMatch = sourceCode.match(/description\s*[:=]\s*['"`]([^'"`]+)['"`]/);
             if (descriptionMatch) {
                 result.description = descriptionMatch[1];
             }
+            // Icon
             const iconMatch = sourceCode.match(/icon\s*[:=]\s*['"`]([^'"`]+)['"`]/);
             if (iconMatch) {
                 result.icon = iconMatch[1];
             }
+            // Category/group
             const groupMatch = sourceCode.match(/group\s*[:=]\s*\[['"`]([^'"`]+)['"`]\]/);
             if (groupMatch) {
                 result.category = groupMatch[1];
             }
+            // Version
             const versionMatch = sourceCode.match(/version\s*[:=]\s*(\d+)/);
             if (versionMatch) {
                 result.version = parseInt(versionMatch[1]);
             }
+            // Subtitle
             const subtitleMatch = sourceCode.match(/subtitle\s*[:=]\s*['"`]([^'"`]+)['"`]/);
             if (subtitleMatch) {
                 result.subtitle = subtitleMatch[1];
             }
+            // Try to extract properties array
             const propsMatch = sourceCode.match(/properties\s*[:=]\s*(\[[\s\S]*?\])\s*[,}]/);
             if (propsMatch) {
                 try {
+                    // This is complex to parse from minified code, so we'll skip for now
                     result.properties = [];
                 }
                 catch (e) {
+                    // Ignore parsing errors
                 }
             }
+            // Check if it's a trigger node
             if (sourceCode.includes('implements.*ITrigger') ||
                 sourceCode.includes('polling:.*true') ||
                 sourceCode.includes('webhook:.*true') ||
                 result.displayName.toLowerCase().includes('trigger')) {
                 result.isTrigger = true;
             }
+            // Check if it's a webhook node
             if (sourceCode.includes('webhooks:') ||
                 sourceCode.includes('webhook:.*true') ||
                 result.displayName.toLowerCase().includes('webhook')) {
@@ -422,6 +478,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
         }
         return result;
     }
+    /**
+     * Convert database row to NodeInfo
+     */
     rowToNodeInfo(row) {
         return {
             nodeType: row.node_type,
@@ -454,9 +513,15 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             isWebhook: row.is_webhook === 1
         };
     }
+    /**
+     * Generate hash for content
+     */
     generateHash(content) {
         return (0, crypto_1.createHash)('sha256').update(content).digest('hex');
     }
+    /**
+     * Store extraction statistics
+     */
     storeStatistics(stats) {
         if (!this.db)
             throw new Error('Database not initialized');
@@ -466,6 +531,7 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
         total_code_size, total_docs_size
       ) VALUES (?, ?, ?, ?, ?)
     `);
+        // Calculate sizes
         const sizeStats = this.db.prepare(`
       SELECT 
         COUNT(*) as total,
@@ -477,6 +543,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
     `).get();
         stmt.run(stats.successful, sizeStats?.with_docs || 0, sizeStats?.with_examples || 0, sizeStats?.code_size || 0, sizeStats?.docs_size || 0);
     }
+    /**
+     * Get database statistics
+     */
     async getStatistics() {
         await this.ensureInitialized();
         const stats = this.db.prepare(`
@@ -509,6 +578,9 @@ CREATE TABLE IF NOT EXISTS extraction_stats (
             packageDistribution: packages
         };
     }
+    /**
+     * Close database connection
+     */
     async close() {
         await this.ensureInitialized();
         this.db.close();

@@ -1,5 +1,13 @@
 #!/usr/bin/env ts-node
 "use strict";
+/**
+ * Test Enhanced Validation
+ *
+ * Demonstrates the improvements in the enhanced validation system:
+ * - Operation-aware validation reduces false positives
+ * - Node-specific validators provide better error messages
+ * - Examples are included in validation responses
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_validator_1 = require("../services/config-validator");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
@@ -10,6 +18,7 @@ async function testValidation() {
     const repository = new node_repository_1.NodeRepository(db);
     console.log('🧪 Testing Enhanced Validation System\n');
     console.log('='.repeat(60));
+    // Test Case 1: Slack Send Message - Compare old vs new validation
     console.log('\n📧 Test Case 1: Slack Send Message');
     console.log('-'.repeat(40));
     const slackConfig = {
@@ -20,6 +29,7 @@ async function testValidation() {
     };
     const slackNode = repository.getNode('nodes-base.slack');
     if (slackNode && slackNode.properties) {
+        // Old validation (full mode)
         console.log('\n❌ OLD Validation (validate_node_config):');
         const oldResult = config_validator_1.ConfigValidator.validate('nodes-base.slack', slackConfig, slackNode.properties);
         console.log(`  Errors: ${oldResult.errors.length}`);
@@ -31,6 +41,7 @@ async function testValidation() {
                 console.log(`    - ${err.message}`);
             });
         }
+        // New validation (operation mode)
         console.log('\n✅ NEW Validation (validate_node_operation):');
         const newResult = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode('nodes-base.slack', slackConfig, slackNode.properties, 'operation');
         console.log(`  Errors: ${newResult.errors.length}`);
@@ -50,10 +61,12 @@ async function testValidation() {
             });
         }
     }
+    // Test Case 2: Google Sheets Append - With validation errors
     console.log('\n\n📊 Test Case 2: Google Sheets Append (with errors)');
     console.log('-'.repeat(40));
     const sheetsConfigBad = {
         operation: 'append',
+        // Missing required fields
     };
     const sheetsNode = repository.getNode('nodes-base.googleSheets');
     if (sheetsNode && sheetsNode.properties) {
@@ -77,12 +90,14 @@ async function testValidation() {
             });
         }
     }
+    // Test Case 3: Complex Slack Update Message
     console.log('\n\n💬 Test Case 3: Slack Update Message');
     console.log('-'.repeat(40));
     const slackUpdateConfig = {
         resource: 'message',
         operation: 'update',
         channel: '#general',
+        // Missing required 'ts' field
         text: 'Updated message'
     };
     if (slackNode && slackNode.properties) {
@@ -96,6 +111,7 @@ async function testValidation() {
             console.log(`      Fix: ${err.fix}`);
         });
     }
+    // Test Case 4: Comparison Summary
     console.log('\n\n📈 Summary: Old vs New Validation');
     console.log('='.repeat(60));
     console.log('\nOLD validate_node_config:');
@@ -113,5 +129,6 @@ async function testValidation() {
     console.log('\n✨ The enhanced validation makes AI agents much more effective!');
     db.close();
 }
+// Run the test
 testValidation().catch(console.error);
 //# sourceMappingURL=test-enhanced-validation.js.map

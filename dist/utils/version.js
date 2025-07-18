@@ -3,6 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PROJECT_VERSION = void 0;
 const fs_1 = require("fs");
 const path_1 = require("path");
+/**
+ * Get the project version from package.json
+ * This ensures we have a single source of truth for versioning
+ */
 function getProjectVersion() {
     try {
         const packageJsonPath = (0, path_1.join)(__dirname, '../../package.json');

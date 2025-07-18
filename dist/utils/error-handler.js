@@ -5,6 +5,9 @@ exports.handleError = handleError;
 exports.withErrorHandling = withErrorHandling;
 const logger_1 = require("./logger");
 class MCPError extends Error {
+    code;
+    statusCode;
+    data;
     constructor(message, code, statusCode, data) {
         super(message);
         this.name = 'MCPError';
@@ -54,6 +57,7 @@ function handleError(error) {
         return error;
     }
     if (error.response) {
+        // HTTP error from n8n API
         const status = error.response.status;
         const message = error.response.data?.message || error.message;
         if (status === 401) {
@@ -70,6 +74,7 @@ function handleError(error) {
     if (error.code === 'ECONNREFUSED') {
         return new N8NConnectionError('Cannot connect to n8n API');
     }
+    // Generic error
     return new MCPError(error.message || 'An unexpected error occurred', 'UNKNOWN_ERROR', 500);
 }
 async function withErrorHandling(operation, context) {

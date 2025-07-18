@@ -1,14 +1,23 @@
 "use strict";
+/**
+ * Workflow Validator for n8n workflows
+ * Validates complete workflow structure, connections, and node configurations
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkflowValidator = void 0;
 const expression_validator_1 = require("./expression-validator");
 const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[WorkflowValidator]' });
 class WorkflowValidator {
+    nodeRepository;
+    nodeValidator;
     constructor(nodeRepository, nodeValidator) {
         this.nodeRepository = nodeRepository;
         this.nodeValidator = nodeValidator;
     }
+    /**
+     * Validate a complete workflow
+     */
     async validateWorkflow(workflow, options = {}) {
         const { validateNodes = true, validateConnections = true, validateExpressions = true, profile = 'runtime' } = options;
         const result = {
@@ -26,17 +35,23 @@ class WorkflowValidator {
             suggestions: []
         };
         try {
+            // Basic workflow structure validation
             this.validateWorkflowStructure(workflow, result);
+            // Validate each node if requested
             if (validateNodes) {
                 await this.validateAllNodes(workflow, result, profile);
             }
+            // Validate connections if requested
             if (validateConnections) {
                 this.validateConnections(workflow, result);
             }
+            // Validate expressions if requested
             if (validateExpressions) {
                 this.validateExpressions(workflow, result);
             }
+            // Check workflow patterns and best practices
             this.checkWorkflowPatterns(workflow, result);
+            // Add suggestions based on findings
             this.generateSuggestions(workflow, result);
         }
         catch (error) {
@@ -49,7 +64,11 @@ class WorkflowValidator {
         result.valid = result.errors.length === 0;
         return result;
     }
+    /**
+     * Validate basic workflow structure
+     */
     validateWorkflowStructure(workflow, result) {
+        // Check for required fields
         if (!workflow.nodes || !Array.isArray(workflow.nodes)) {
             result.errors.push({
                 type: 'error',
@@ -64,6 +83,7 @@ class WorkflowValidator {
             });
             return;
         }
+        // Check for empty workflow
         if (workflow.nodes.length === 0) {
             result.errors.push({
                 type: 'error',
@@ -71,6 +91,7 @@ class WorkflowValidator {
             });
             return;
         }
+        // Check for minimum viable workflow
         if (workflow.nodes.length === 1) {
             const singleNode = workflow.nodes[0];
             const normalizedType = singleNode.type.replace('n8n-nodes-base.', 'nodes-base.');
@@ -89,6 +110,7 @@ class WorkflowValidator {
                 });
             }
         }
+        // Check for empty connections in multi-node workflows
         if (workflow.nodes.length > 1) {
             const hasEnabledNodes = workflow.nodes.some(n => !n.disabled);
             const hasConnections = Object.keys(workflow.connections).length > 0;
@@ -99,6 +121,7 @@ class WorkflowValidator {
                 });
             }
         }
+        // Check for duplicate node names
         const nodeNames = new Set();
         const nodeIds = new Set();
         for (const node of workflow.nodes) {
@@ -120,6 +143,7 @@ class WorkflowValidator {
             }
             nodeIds.add(node.id);
         }
+        // Count trigger nodes - normalize type names first
         const triggerNodes = workflow.nodes.filter(n => {
             const normalizedType = n.type.replace('n8n-nodes-base.', 'nodes-base.');
             return normalizedType.toLowerCase().includes('trigger') ||
@@ -129,6 +153,7 @@ class WorkflowValidator {
                 normalizedType === 'nodes-base.formTrigger';
         });
         result.statistics.triggerNodes = triggerNodes.length;
+        // Check for at least one trigger node
         if (triggerNodes.length === 0 && workflow.nodes.filter(n => !n.disabled).length > 0) {
             result.warnings.push({
                 type: 'warning',
@@ -136,12 +161,17 @@ class WorkflowValidator {
             });
         }
     }
+    /**
+     * Validate all nodes in the workflow
+     */
     async validateAllNodes(workflow, result, profile) {
         for (const node of workflow.nodes) {
             if (node.disabled)
                 continue;
             try {
+                // FIRST: Check for common invalid patterns before database lookup
                 if (node.type.startsWith('nodes-base.')) {
+                    // This is ALWAYS invalid in workflows - must use n8n-nodes-base prefix
                     const correctType = node.type.replace('nodes-base.', 'n8n-nodes-base.');
                     result.errors.push({
                         type: 'error',
@@ -151,20 +181,26 @@ class WorkflowValidator {
                     });
                     continue;
                 }
+                // Get node definition - try multiple formats
                 let nodeInfo = this.nodeRepository.getNode(node.type);
+                // If not found, try with normalized type
                 if (!nodeInfo) {
                     let normalizedType = node.type;
+                    // Handle n8n-nodes-base -> nodes-base
                     if (node.type.startsWith('n8n-nodes-base.')) {
                         normalizedType = node.type.replace('n8n-nodes-base.', 'nodes-base.');
                         nodeInfo = this.nodeRepository.getNode(normalizedType);
                     }
+                    // Handle @n8n/n8n-nodes-langchain -> nodes-langchain
                     else if (node.type.startsWith('@n8n/n8n-nodes-langchain.')) {
                         normalizedType = node.type.replace('@n8n/n8n-nodes-langchain.', 'nodes-langchain.');
                         nodeInfo = this.nodeRepository.getNode(normalizedType);
                     }
                 }
                 if (!nodeInfo) {
+                    // Check for common mistakes
                     let suggestion = '';
+                    // Missing package prefix
                     if (node.type.startsWith('nodes-base.')) {
                         const withPrefix = node.type.replace('nodes-base.', 'n8n-nodes-base.');
                         const exists = this.nodeRepository.getNode(withPrefix) ||
@@ -173,7 +209,9 @@ class WorkflowValidator {
                             suggestion = ` Did you mean "n8n-nodes-base.${node.type.substring(11)}"?`;
                         }
                     }
+                    // Check if it's just the node name without package
                     else if (!node.type.includes('.')) {
+                        // Try common node names
                         const commonNodes = [
                             'webhook', 'httpRequest', 'set', 'code', 'manualTrigger',
                             'scheduleTrigger', 'emailSend', 'slack', 'discord'
@@ -182,6 +220,7 @@ class WorkflowValidator {
                             suggestion = ` Did you mean "n8n-nodes-base.${node.type}"?`;
                         }
                     }
+                    // If no specific suggestion, try to find similar nodes
                     if (!suggestion) {
                         const similarNodes = this.findSimilarNodeTypes(node.type);
                         if (similarNodes.length > 0) {
@@ -196,7 +235,9 @@ class WorkflowValidator {
                     });
                     continue;
                 }
+                // Validate typeVersion for versioned nodes
                 if (nodeInfo.isVersioned) {
+                    // Check if typeVersion is missing
                     if (!node.typeVersion) {
                         result.errors.push({
                             type: 'error',
@@ -205,6 +246,7 @@ class WorkflowValidator {
                             message: `Missing required property 'typeVersion'. Add typeVersion: ${nodeInfo.version || 1}`
                         });
                     }
+                    // Check if typeVersion is invalid
                     else if (typeof node.typeVersion !== 'number' || node.typeVersion < 1) {
                         result.errors.push({
                             type: 'error',
@@ -213,6 +255,7 @@ class WorkflowValidator {
                             message: `Invalid typeVersion: ${node.typeVersion}. Must be a positive number`
                         });
                     }
+                    // Check if typeVersion is outdated (less than latest)
                     else if (nodeInfo.version && node.typeVersion < nodeInfo.version) {
                         result.warnings.push({
                             type: 'warning',
@@ -221,6 +264,7 @@ class WorkflowValidator {
                             message: `Outdated typeVersion: ${node.typeVersion}. Latest is ${nodeInfo.version}`
                         });
                     }
+                    // Check if typeVersion exceeds maximum supported
                     else if (nodeInfo.version && node.typeVersion > nodeInfo.version) {
                         result.errors.push({
                             type: 'error',
@@ -230,7 +274,9 @@ class WorkflowValidator {
                         });
                     }
                 }
+                // Validate node configuration
                 const nodeValidation = this.nodeValidator.validateWithMode(node.type, node.parameters, nodeInfo.properties || [], 'operation', profile);
+                // Add node-specific errors and warnings
                 nodeValidation.errors.forEach((error) => {
                     result.errors.push({
                         type: 'error',
@@ -258,12 +304,17 @@ class WorkflowValidator {
             }
         }
     }
+    /**
+     * Validate workflow connections
+     */
     validateConnections(workflow, result) {
         const nodeMap = new Map(workflow.nodes.map(n => [n.name, n]));
         const nodeIdMap = new Map(workflow.nodes.map(n => [n.id, n]));
+        // Check all connections
         for (const [sourceName, outputs] of Object.entries(workflow.connections)) {
             const sourceNode = nodeMap.get(sourceName);
             if (!sourceNode) {
+                // Check if this is an ID being used instead of a name
                 const nodeById = nodeIdMap.get(sourceName);
                 if (nodeById) {
                     result.errors.push({
@@ -282,18 +333,24 @@ class WorkflowValidator {
                 result.statistics.invalidConnections++;
                 continue;
             }
+            // Check main outputs
             if (outputs.main) {
                 this.validateConnectionOutputs(sourceName, outputs.main, nodeMap, nodeIdMap, result, 'main');
             }
+            // Check error outputs
             if (outputs.error) {
                 this.validateConnectionOutputs(sourceName, outputs.error, nodeMap, nodeIdMap, result, 'error');
             }
+            // Check AI tool outputs
             if (outputs.ai_tool) {
                 this.validateConnectionOutputs(sourceName, outputs.ai_tool, nodeMap, nodeIdMap, result, 'ai_tool');
             }
         }
+        // Check for orphaned nodes (not connected and not triggers)
         const connectedNodes = new Set();
+        // Add all source nodes
         Object.keys(workflow.connections).forEach(name => connectedNodes.add(name));
+        // Add all target nodes
         Object.values(workflow.connections).forEach(outputs => {
             if (outputs.main) {
                 outputs.main.flat().forEach(conn => {
@@ -314,6 +371,7 @@ class WorkflowValidator {
                 });
             }
         });
+        // Check for orphaned nodes
         for (const node of workflow.nodes) {
             if (node.disabled)
                 continue;
@@ -332,6 +390,7 @@ class WorkflowValidator {
                 });
             }
         }
+        // Check for cycles
         if (this.hasCycle(workflow)) {
             result.errors.push({
                 type: 'error',
@@ -339,6 +398,9 @@ class WorkflowValidator {
             });
         }
     }
+    /**
+     * Validate connection outputs
+     */
     validateConnectionOutputs(sourceName, outputs, nodeMap, nodeIdMap, result, outputType) {
         outputs.forEach((outputConnections, outputIndex) => {
             if (!outputConnections)
@@ -346,6 +408,7 @@ class WorkflowValidator {
             outputConnections.forEach(connection => {
                 const targetNode = nodeMap.get(connection.node);
                 if (!targetNode) {
+                    // Check if this is an ID being used instead of a name
                     const nodeById = nodeIdMap.get(connection.node);
                     if (nodeById) {
                         result.errors.push({
@@ -371,6 +434,7 @@ class WorkflowValidator {
                 }
                 else {
                     result.statistics.validConnections++;
+                    // Additional validation for AI tool connections
                     if (outputType === 'ai_tool') {
                         this.validateAIToolConnection(sourceName, targetNode, result);
                     }
@@ -378,20 +442,30 @@ class WorkflowValidator {
             });
         });
     }
+    /**
+     * Validate AI tool connections
+     */
     validateAIToolConnection(sourceName, targetNode, result) {
+        // For AI tool connections, we just need to check if this is being used as a tool
+        // The source should be an AI Agent connecting to this target node as a tool
+        // Get target node info to check if it can be used as a tool
         let targetNodeInfo = this.nodeRepository.getNode(targetNode.type);
+        // Try normalized type if not found
         if (!targetNodeInfo) {
             let normalizedType = targetNode.type;
+            // Handle n8n-nodes-base -> nodes-base
             if (targetNode.type.startsWith('n8n-nodes-base.')) {
                 normalizedType = targetNode.type.replace('n8n-nodes-base.', 'nodes-base.');
                 targetNodeInfo = this.nodeRepository.getNode(normalizedType);
             }
+            // Handle @n8n/n8n-nodes-langchain -> nodes-langchain
             else if (targetNode.type.startsWith('@n8n/n8n-nodes-langchain.')) {
                 normalizedType = targetNode.type.replace('@n8n/n8n-nodes-langchain.', 'nodes-langchain.');
                 targetNodeInfo = this.nodeRepository.getNode(normalizedType);
             }
         }
         if (targetNodeInfo && !targetNodeInfo.isAITool && targetNodeInfo.package !== 'n8n-nodes-base') {
+            // It's a community node being used as a tool
             result.warnings.push({
                 type: 'warning',
                 nodeId: targetNode.id,
@@ -400,6 +474,9 @@ class WorkflowValidator {
             });
         }
     }
+    /**
+     * Check if workflow has cycles
+     */
     hasCycle(workflow) {
         const visited = new Set();
         const recursionStack = new Set();
@@ -440,6 +517,7 @@ class WorkflowValidator {
             recursionStack.delete(nodeName);
             return false;
         };
+        // Check from all nodes
         for (const node of workflow.nodes) {
             if (!visited.has(node.name)) {
                 if (hasCycleDFS(node.name))
@@ -448,19 +526,25 @@ class WorkflowValidator {
         }
         return false;
     }
+    /**
+     * Validate expressions in the workflow
+     */
     validateExpressions(workflow, result) {
         const nodeNames = workflow.nodes.map(n => n.name);
         for (const node of workflow.nodes) {
             if (node.disabled)
                 continue;
+            // Create expression context
             const context = {
                 availableNodes: nodeNames.filter(n => n !== node.name),
                 currentNodeName: node.name,
                 hasInputData: this.nodeHasInput(node.name, workflow),
-                isInLoop: false
+                isInLoop: false // Could be enhanced to detect loop nodes
             };
+            // Validate expressions in parameters
             const exprValidation = expression_validator_1.ExpressionValidator.validateNodeExpressions(node.parameters, context);
             result.statistics.expressionsValidated += exprValidation.usedVariables.size;
+            // Add expression errors and warnings
             exprValidation.errors.forEach(error => {
                 result.errors.push({
                     type: 'error',
@@ -479,6 +563,9 @@ class WorkflowValidator {
             });
         }
     }
+    /**
+     * Check if a node has input connections
+     */
     nodeHasInput(nodeName, workflow) {
         for (const [sourceName, outputs] of Object.entries(workflow.connections)) {
             if (outputs.main) {
@@ -491,7 +578,11 @@ class WorkflowValidator {
         }
         return false;
     }
+    /**
+     * Check workflow patterns and best practices
+     */
     checkWorkflowPatterns(workflow, result) {
+        // Check for error handling
         const hasErrorHandling = Object.values(workflow.connections).some(outputs => outputs.error && outputs.error.length > 0);
         if (!hasErrorHandling && workflow.nodes.length > 3) {
             result.warnings.push({
@@ -499,6 +590,7 @@ class WorkflowValidator {
                 message: 'Consider adding error handling to your workflow'
             });
         }
+        // Check for very long linear workflows
         const linearChainLength = this.getLongestLinearChain(workflow);
         if (linearChainLength > 10) {
             result.warnings.push({
@@ -506,6 +598,7 @@ class WorkflowValidator {
                 message: `Long linear chain detected (${linearChainLength} nodes). Consider breaking into sub-workflows.`
             });
         }
+        // Check for missing credentials
         for (const node of workflow.nodes) {
             if (node.credentials && Object.keys(node.credentials).length > 0) {
                 for (const [credType, credConfig] of Object.entries(node.credentials)) {
@@ -520,9 +613,11 @@ class WorkflowValidator {
                 }
             }
         }
+        // Check for AI Agent workflows
         const aiAgentNodes = workflow.nodes.filter(n => n.type.toLowerCase().includes('agent') ||
             n.type.includes('langchain.agent'));
         if (aiAgentNodes.length > 0) {
+            // Check if AI agents have tools connected
             for (const agentNode of aiAgentNodes) {
                 const connections = workflow.connections[agentNode.name];
                 if (!connections?.ai_tool || connections.ai_tool.flat().filter(c => c).length === 0) {
@@ -534,16 +629,21 @@ class WorkflowValidator {
                     });
                 }
             }
+            // Check for community nodes used as tools
             const hasAIToolConnections = Object.values(workflow.connections).some(outputs => outputs.ai_tool && outputs.ai_tool.length > 0);
             if (hasAIToolConnections) {
                 result.suggestions.push('For community nodes used as AI tools, ensure N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true is set');
             }
         }
     }
+    /**
+     * Get the longest linear chain in the workflow
+     */
     getLongestLinearChain(workflow) {
         const memo = new Map();
         const visiting = new Set();
         const getChainLength = (nodeName) => {
+            // If we're already visiting this node, we have a cycle
             if (visiting.has(nodeName))
                 return 0;
             if (memo.has(nodeName))
@@ -574,7 +674,12 @@ class WorkflowValidator {
         }
         return maxChain;
     }
+    /**
+     * Find similar node types for suggestions
+     */
     findSimilarNodeTypes(invalidType) {
+        // Since we don't have a method to list all nodes, we'll use a predefined list
+        // of common node types that users might be looking for
         const suggestions = [];
         const nodeName = invalidType.includes('.') ? invalidType.split('.').pop() : invalidType;
         const commonNodeMappings = {
@@ -607,10 +712,12 @@ class WorkflowValidator {
             'github': ['nodes-base.github'],
             'git': ['nodes-base.github'],
         };
+        // Check for exact match
         const lowerNodeName = nodeName.toLowerCase();
         if (commonNodeMappings[lowerNodeName]) {
             suggestions.push(...commonNodeMappings[lowerNodeName]);
         }
+        // Check for partial matches
         Object.entries(commonNodeMappings).forEach(([key, values]) => {
             if (key.includes(lowerNodeName) || lowerNodeName.includes(key)) {
                 values.forEach(v => {
@@ -620,12 +727,17 @@ class WorkflowValidator {
                 });
             }
         });
-        return suggestions.slice(0, 3);
+        return suggestions.slice(0, 3); // Return top 3 suggestions
     }
+    /**
+     * Generate suggestions based on validation results
+     */
     generateSuggestions(workflow, result) {
+        // Suggest adding trigger if missing
         if (result.statistics.triggerNodes === 0) {
             result.suggestions.push('Add a trigger node (e.g., Webhook, Schedule Trigger) to automate workflow execution');
         }
+        // Suggest proper connection structure for workflows with connection errors
         const hasConnectionErrors = result.errors.some(e => e.message && (e.message.includes('connection') ||
             e.message.includes('Connection') ||
             e.message.includes('Multi-node workflow has no connections')));
@@ -633,12 +745,15 @@ class WorkflowValidator {
             result.suggestions.push('Example connection structure: connections: { "Manual Trigger": { "main": [[{ "node": "Set", "type": "main", "index": 0 }]] } }');
             result.suggestions.push('Remember: Use node NAMES (not IDs) in connections. The name is what you see in the UI, not the node type.');
         }
+        // Suggest error handling
         if (!Object.values(workflow.connections).some(o => o.error)) {
             result.suggestions.push('Add error handling using the error output of nodes or an Error Trigger node');
         }
+        // Suggest optimization for large workflows
         if (workflow.nodes.length > 20) {
             result.suggestions.push('Consider breaking this workflow into smaller sub-workflows for better maintainability');
         }
+        // Suggest using Code node for complex logic
         const complexExpressionNodes = workflow.nodes.filter(node => {
             const jsonString = JSON.stringify(node.parameters);
             const expressionCount = (jsonString.match(/\{\{/g) || []).length;
@@ -647,6 +762,7 @@ class WorkflowValidator {
         if (complexExpressionNodes.length > 0) {
             result.suggestions.push('Consider using a Code node for complex data transformations instead of multiple expressions');
         }
+        // Suggest minimum workflow structure
         if (workflow.nodes.length === 1 && Object.keys(workflow.connections).length === 0) {
             result.suggestions.push('A minimal workflow needs: 1) A trigger node (e.g., Manual Trigger), 2) An action node (e.g., Set, HTTP Request), 3) A connection between them');
         }

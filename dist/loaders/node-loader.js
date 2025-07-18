@@ -6,17 +6,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.N8nNodeLoader = void 0;
 const path_1 = __importDefault(require("path"));
 class N8nNodeLoader {
-    constructor() {
-        this.CORE_PACKAGES = [
-            { name: 'n8n-nodes-base', path: 'n8n-nodes-base' },
-            { name: '@n8n/n8n-nodes-langchain', path: '@n8n/n8n-nodes-langchain' }
-        ];
-    }
+    CORE_PACKAGES = [
+        { name: 'n8n-nodes-base', path: 'n8n-nodes-base' },
+        { name: '@n8n/n8n-nodes-langchain', path: '@n8n/n8n-nodes-langchain' }
+    ];
     async loadAllNodes() {
         const results = [];
         for (const pkg of this.CORE_PACKAGES) {
             try {
                 console.log(`\n📦 Loading package: ${pkg.name} from ${pkg.path}`);
+                // Use the path property to locate the package
                 const packageJson = require(`${pkg.path}/package.json`);
                 console.log(`  Found ${Object.keys(packageJson.n8n?.nodes || {}).length} nodes in package.json`);
                 const nodes = await this.loadPackageNodes(pkg.name, pkg.path, packageJson);
@@ -31,14 +30,18 @@ class N8nNodeLoader {
     async loadPackageNodes(packageName, packagePath, packageJson) {
         const n8nConfig = packageJson.n8n || {};
         const nodes = [];
+        // Check if nodes is an array or object
         const nodesList = n8nConfig.nodes || [];
         if (Array.isArray(nodesList)) {
+            // Handle array format (n8n-nodes-base uses this)
             for (const nodePath of nodesList) {
                 try {
                     const fullPath = require.resolve(`${packagePath}/${nodePath}`);
                     const nodeModule = require(fullPath);
+                    // Extract node name from path (e.g., "dist/nodes/Slack/Slack.node.js" -> "Slack")
                     const nodeNameMatch = nodePath.match(/\/([^\/]+)\.node\.(js|ts)$/);
                     const nodeName = nodeNameMatch ? nodeNameMatch[1] : path_1.default.basename(nodePath, '.node.js');
+                    // Handle default export and various export patterns
                     const NodeClass = nodeModule.default || nodeModule[nodeName] || Object.values(nodeModule)[0];
                     if (NodeClass) {
                         nodes.push({ packageName, nodeName, NodeClass });
@@ -54,10 +57,12 @@ class N8nNodeLoader {
             }
         }
         else {
+            // Handle object format (for other packages)
             for (const [nodeName, nodePath] of Object.entries(nodesList)) {
                 try {
                     const fullPath = require.resolve(`${packagePath}/${nodePath}`);
                     const nodeModule = require(fullPath);
+                    // Handle default export and various export patterns
                     const NodeClass = nodeModule.default || nodeModule[nodeName] || Object.values(nodeModule)[0];
                     if (NodeClass) {
                         nodes.push({ packageName, nodeName, NodeClass });

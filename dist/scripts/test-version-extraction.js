@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_parser_1 = require("../parsers/node-parser");
+// Test script to verify version extraction from different node types
 async function testVersionExtraction() {
     console.log('Testing version extraction from different node types...\n');
     const parser = new node_parser_1.NodeParser();
+    // Test cases
     const testCases = [
         {
             name: 'Gmail Trigger (version array)',
@@ -24,12 +26,15 @@ async function testVersionExtraction() {
             expectedVersioned: true
         }
     ];
+    // Load nodes from packages
     const basePackagePath = process.cwd() + '/node_modules/n8n/node_modules/n8n-nodes-base';
     for (const testCase of testCases) {
         console.log(`\nTesting: ${testCase.name}`);
         console.log(`Node Type: ${testCase.nodeType}`);
         try {
+            // Find the node file
             const nodeName = testCase.nodeType.split('.')[1];
+            // Try different paths
             const possiblePaths = [
                 `${basePackagePath}/dist/nodes/${nodeName}.node.js`,
                 `${basePackagePath}/dist/nodes/Google/Gmail/GmailTrigger.node.js`,
@@ -45,12 +50,14 @@ async function testVersionExtraction() {
                         break;
                 }
                 catch (e) {
+                    // Try next path
                 }
             }
             if (!nodeClass) {
                 console.log('❌ Could not load node');
                 continue;
             }
+            // Parse the node
             const parsed = parser.parse(nodeClass, 'n8n-nodes-base');
             console.log(`Loaded node: ${parsed.displayName} (${parsed.nodeType})`);
             console.log(`Extracted version: ${parsed.version}`);
@@ -70,5 +77,6 @@ async function testVersionExtraction() {
         }
     }
 }
+// Run the test
 testVersionExtraction().catch(console.error);
 //# sourceMappingURL=test-version-extraction.js.map

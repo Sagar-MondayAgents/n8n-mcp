@@ -49,21 +49,54 @@ export declare class NodeDocumentationService {
     private initializeAsync;
     private ensureInitialized;
     private initializeDatabase;
+    /**
+     * Store complete node information including docs and examples
+     */
     storeNode(nodeInfo: NodeInfo): Promise<void>;
+    /**
+     * Get complete node information
+     */
     getNodeInfo(nodeType: string): Promise<NodeInfo | null>;
+    /**
+     * Search nodes with various filters
+     */
     searchNodes(options: SearchOptions): Promise<NodeInfo[]>;
+    /**
+     * List all nodes
+     */
     listNodes(): Promise<NodeInfo[]>;
+    /**
+     * Extract and store all nodes with documentation
+     */
     rebuildDatabase(): Promise<{
         total: number;
         successful: number;
         failed: number;
         errors: string[];
     }>;
+    /**
+     * Parse node definition from source code
+     */
     private parseNodeDefinition;
+    /**
+     * Convert database row to NodeInfo
+     */
     private rowToNodeInfo;
+    /**
+     * Generate hash for content
+     */
     private generateHash;
+    /**
+     * Store extraction statistics
+     */
     private storeStatistics;
+    /**
+     * Get database statistics
+     */
     getStatistics(): Promise<any>;
+    /**
+     * Close database connection
+     */
     close(): Promise<void>;
 }
 export {};

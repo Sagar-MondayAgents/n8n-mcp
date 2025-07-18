@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 "use strict";
+/**
+ * Test validation of a single workflow
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -13,6 +16,7 @@ const enhanced_config_validator_1 = require("../services/enhanced-config-validat
 const logger_1 = require("../utils/logger");
 const logger = new logger_1.Logger({ prefix: '[test-single-workflow]' });
 async function testSingleWorkflow() {
+    // Read the workflow file
     const workflowPath = process.argv[2];
     if (!workflowPath) {
         logger.error('Please provide a workflow file path');
@@ -23,6 +27,7 @@ async function testSingleWorkflow() {
         process.exit(1);
     }
     logger.info(`Testing workflow: ${workflowPath}\n`);
+    // Initialize database
     const dbPath = path_1.default.join(process.cwd(), 'data', 'nodes.db');
     if (!(0, fs_1.existsSync)(dbPath)) {
         logger.error('Database not found. Run npm run rebuild first.');
@@ -32,14 +37,17 @@ async function testSingleWorkflow() {
     const repository = new node_repository_1.NodeRepository(db);
     const validator = new workflow_validator_1.WorkflowValidator(repository, enhanced_config_validator_1.EnhancedConfigValidator);
     try {
+        // Read and parse workflow
         const workflowJson = JSON.parse((0, fs_1.readFileSync)(workflowPath, 'utf8'));
         logger.info(`Workflow: ${workflowJson.name || 'Unnamed'}`);
         logger.info(`Nodes: ${workflowJson.nodes?.length || 0}`);
         logger.info(`Connections: ${Object.keys(workflowJson.connections || {}).length}`);
+        // List all node types in the workflow
         logger.info('\nNode types in workflow:');
         workflowJson.nodes?.forEach((node) => {
             logger.info(`  - ${node.name}: ${node.type}`);
         });
+        // Check what these node types are in our database
         logger.info('\nChecking node types in database:');
         for (const node of workflowJson.nodes || []) {
             const dbNode = repository.getNode(node.type);
@@ -47,6 +55,7 @@ async function testSingleWorkflow() {
                 logger.info(`  ✓ ${node.type} found in database`);
             }
             else {
+                // Try normalization patterns
                 let shortType = node.type;
                 if (node.type.startsWith('n8n-nodes-base.')) {
                     shortType = node.type.replace('n8n-nodes-base.', 'nodes-base.');
@@ -66,6 +75,7 @@ async function testSingleWorkflow() {
         logger.info('\n' + '='.repeat(80));
         logger.info('VALIDATION RESULTS');
         logger.info('='.repeat(80) + '\n');
+        // Validate the workflow
         const result = await validator.validateWorkflow(workflowJson);
         console.log(`Valid: ${result.valid ? '✅ YES' : '❌ NO'}`);
         if (result.errors.length > 0) {
@@ -105,6 +115,7 @@ async function testSingleWorkflow() {
         db.close();
     }
 }
+// Run test
 testSingleWorkflow().catch(error => {
     logger.error('Test failed:', error);
     process.exit(1);
