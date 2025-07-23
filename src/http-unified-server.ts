@@ -43,18 +43,31 @@ export class UnifiedHTTPServer {
   }
   
   private setupMiddleware(): void {
-    // JSON body parser with size limit
-    this.app.use(express.json({ limit: this.config.maxRequestSize }));
+    // DO NOT use global body parser - it breaks StreamableHTTP!
+    // Remove this line:
+    // this.app.use(express.json({ limit: this.config.maxRequestSize }));
     
     // CORS configuration
     this.app.use(cors({
-      origin: this.config.corsOrigin,
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = this.config.corsOrigin === '*' 
+          ? true 
+          : (Array.isArray(this.config.corsOrigin) 
+              ? this.config.corsOrigin.includes(origin)
+              : this.config.corsOrigin === origin);
+        
+        callback(null, allowedOrigins);
+      },
       methods: ['GET', 'POST', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-      credentials: true
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Accept'],
+      exposedHeaders: ['X-Session-Id'],
+      credentials: true,
+      maxAge: 86400
     }));
     
-    // Request logging
+    // Request logging (without body)
     this.app.use((req: Request, res: Response, next: NextFunction) => {
       logger.debug(`${req.method} ${req.path}`, {
         headers: req.headers,
@@ -108,25 +121,41 @@ export class UnifiedHTTPServer {
       });
     });
     
-    // Streamable HTTP endpoint - NEW RECOMMENDED TRANSPORT
-    this.app.post('/mcp', async (req: Request, res: Response) => {
-      try {
-        await this.engine.processStreamableHTTP(req, res);
-      } catch (error) {
-        logger.error('Streamable HTTP error:', error);
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: '2.0',
-            error: {
-              code: -32603,
-              message: 'Internal error',
-              data: error instanceof Error ? error.message : 'Unknown error'
-            }
-          });
-        }
-      }
-    });
+// Streamable HTTP endpoint - with proper raw body handling
+this.app.post('/mcp', async (req: Request, res: Response) => {
+  try {
+    // Don't use any body parser for this route - StreamableHTTP needs raw stream
+    // The transport will handle parsing itself
     
+    // Check for authentication in headers only
+    const authToken = process.env.AUTH_TOKEN;
+    if (authToken) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+        res.status(401).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Unauthorized' },
+          id: null
+        });
+        return;
+      }
+    }
+    
+    await this.engine.processStreamableHTTP(req, res);
+  } catch (error) {
+    logger.error('Streamable HTTP error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal error',
+          data: error instanceof Error ? error.message : 'Unknown error'
+        }
+      });
+    }
+  }
+});
     // SSE endpoint - LEGACY SUPPORT
     this.app.get('/sse', async (req: Request, res: Response) => {
       try {

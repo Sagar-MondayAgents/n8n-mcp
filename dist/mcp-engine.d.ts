@@ -38,6 +38,7 @@ export declare class N8NMCPEngine {
      *   await engine.processStreamableHTTP(req, res);
      * });
      */
+    processStreamableHTTP2(req: Request, res: Response): Promise<void>;
     processStreamableHTTP(req: Request, res: Response): Promise<void>;
     /**
      * Get transport capabilities

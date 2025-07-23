@@ -63,7 +63,7 @@ export class N8NMCPEngine {
    *   await engine.processStreamableHTTP(req, res);
    * });
    */
-  async processStreamableHTTP(req: Request, res: Response): Promise<void> {
+  async processStreamableHTTP2(req: Request, res: Response): Promise<void> {
     try {
       // Create a new server instance for each request to ensure isolation
       const server = new N8NDocumentationMCPServer();
@@ -93,7 +93,35 @@ export class N8NMCPEngine {
       throw error;
     }
   }
-  
+  // In processStreamableHTTP method in mcp-engine.ts
+async processStreamableHTTP(req: Request, res: Response): Promise<void> {
+  try {
+    logger.debug('processStreamableHTTP called', {
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      readable: req.readable,
+      readableEnded: req.readableEnded
+    });
+    
+    // Check if stream is still readable
+    if (!req.readable) {
+      throw new Error('Request stream is not readable - body may have been consumed by middleware');
+    }
+    
+    const server = new N8NDocumentationMCPServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    
+    await server.connect(transport);
+    await transport.handleRequest(req, res);
+    
+  } catch (error) {
+    logger.error('processStreamableHTTP error:', error);
+    throw error;
+  }
+}
   /**
    * Get transport capabilities
    */

@@ -36,16 +36,28 @@ class UnifiedHTTPServer {
         this.setupErrorHandling();
     }
     setupMiddleware() {
-        // JSON body parser with size limit
-        this.app.use(express_1.default.json({ limit: this.config.maxRequestSize }));
+        // DO NOT use global body parser - it breaks StreamableHTTP!
+        // Remove this line:
+        // this.app.use(express.json({ limit: this.config.maxRequestSize }));
         // CORS configuration
         this.app.use((0, cors_1.default)({
-            origin: this.config.corsOrigin,
+            origin: (origin, callback) => {
+                if (!origin)
+                    return callback(null, true);
+                const allowedOrigins = this.config.corsOrigin === '*'
+                    ? true
+                    : (Array.isArray(this.config.corsOrigin)
+                        ? this.config.corsOrigin.includes(origin)
+                        : this.config.corsOrigin === origin);
+                callback(null, allowedOrigins);
+            },
             methods: ['GET', 'POST', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-            credentials: true
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'Accept'],
+            exposedHeaders: ['X-Session-Id'],
+            credentials: true,
+            maxAge: 86400
         }));
-        // Request logging
+        // Request logging (without body)
         this.app.use((req, res, next) => {
             logger_1.logger.debug(`${req.method} ${req.path}`, {
                 headers: req.headers,
@@ -93,9 +105,24 @@ class UnifiedHTTPServer {
                 metrics: this.config.enableMetrics ? '/metrics' : null
             });
         });
-        // Streamable HTTP endpoint - NEW RECOMMENDED TRANSPORT
+        // Streamable HTTP endpoint - with proper raw body handling
         this.app.post('/mcp', async (req, res) => {
             try {
+                // Don't use any body parser for this route - StreamableHTTP needs raw stream
+                // The transport will handle parsing itself
+                // Check for authentication in headers only
+                const authToken = process.env.AUTH_TOKEN;
+                if (authToken) {
+                    const authHeader = req.headers.authorization;
+                    if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+                        res.status(401).json({
+                            jsonrpc: '2.0',
+                            error: { code: -32001, message: 'Unauthorized' },
+                            id: null
+                        });
+                        return;
+                    }
+                }
                 await this.engine.processStreamableHTTP(req, res);
             }
             catch (error) {
