@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1.7
+# Fixed Dockerfile for n8n-mcp - includes @types/jest
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY tsconfig.json ./
+
+# Install all build dependencies including @types/jest
+RUN echo '{}' > package.json && \
+    npm install --no-save \
+        typescript@^5.8.3 \
+        @types/node@^22.15.30 \
+        @types/express@^5.0.3 \
+        @types/jest@^29.5.0 \
+        @modelcontextprotocol/sdk@^1.12.1 \
+        dotenv@^16.5.0 \
+        express@^5.1.0 \
+        axios@^1.10.0 \
+        n8n-workflow@^1.96.0 \
+        uuid@^11.0.5 \
+        @types/uuid@^10.0.0
+
+COPY src ./src
+RUN npx tsc
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+RUN apk add --no-cache curl && \
+    rm -rf /var/cache/apk/*
+
+COPY package.runtime.json package.json
+RUN npm install --production --no-audit --no-fund
+
+COPY --from=builder /app/dist ./dist
+COPY data/nodes.db ./data/
+COPY src/database/schema-optimized.sql ./src/database/
+COPY .env.example ./
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+ENV IS_DOCKER=true
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://127.0.0.1:3000/health || exit 1
+
+CMD ["node", "dist/mcp/index.js"]
